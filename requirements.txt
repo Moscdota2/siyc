@@ -1,0 +1,4 @@
+flask
+pyDolarVenezuela
+requests
+bs4

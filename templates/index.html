@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventario de Productos</title>
+</head>
+<body>
+    <h1>Inventario de Productos</h1>
+    <a href="/create_product">Agregar nuevo producto</a>
+    <ul>
+        {% for product in products %}
+            <li>
+                <strong>{{ product.name }}</strong> (Categoría: {{ product.category }})
+                - Cantidad: {{ product.quantity }}
+                - Precio: ${{ product.price_usd }} / Bs{{ product.price_bs }}
+                <a href="/update_product/{{ product.id }}">Editar</a>
+                <a href="/delete_product/{{ product.id }}" onclick="return confirm('¿Estás seguro?')">Eliminar</a>
+            </li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Producto</title>
+</head>
+<body>
+    <h1>Editar Producto</h1>
+    <form action="/update_product/{{ product.id }}" method="POST">
+        <label for="name">Nombre del Producto:</label>
+        <input type="text" name="name" value="{{ product.name }}" required><br>
+
+        <label for="category">Categoría:</label>
+        <input type="text" name="category" value="{{ product.category }}" required><br>
+
+        <label for="quantity">Cantidad:</label>
+        <input type="number" name="quantity" value="{{ product.quantity }}" required><br>
+
+        <label for="price_usd">Precio en USD:</label>
+        <input type="number" step="0.01" name="price_usd" value="{{ product.price_usd }}" required><br>
+
+        <label for="price_bs">Precio en Bolívares:</label>
+        <input type="number" step="0.01" name="price_bs" value="{{ product.price_bs }}" required><br>
+
+        <input type="submit" value="Actualizar Producto">
+    </form>
+    <a href="/">Volver</a>
+</body>
+</html>
