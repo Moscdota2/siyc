@@ -1,0 +1,22 @@
+<h1>Pedido de la Mesa {{ order.table.number }}</h1>
+<p>Estado: {{ order.status }}</p>
+<p>Total: ${{ order.total_price }}</p>
+
+<h2>Productos en el Pedido:</h2>
+<ul>
+    {% for item in order_details %}
+        <li>{{ item.quantity }}x {{ item.product.name }} - ${{ item.subtotal }}</li>
+    {% endfor %}
+</ul>
+
+<form action="{{ url_for('add_product', order_id=order.id) }}" method="POST">
+    <select name="product_id">
+        {% for product in products %}
+            <option value="{{ product.id }}">{{ product.name }} - ${{ product.price_usd }}</option>
+        {% endfor %}
+    </select>
+    <input type="number" name="quantity" min="1" required>
+    <button type="submit">Agregar Producto</button>
+</form>
+
+<a href="{{ url_for('close_order', order_id=order.id) }}">Cerrar Pedido</a>
