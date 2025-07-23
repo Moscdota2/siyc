@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block title %}Salida de Inventario{% endblock %}
+
+{% block content %}
+<h2>Registrar Salida de Productos</h2>
+<form method="POST">
+    <div class="form-group">
+        <label for="product_id">Producto:</label>
+        <select class="form-control" name="product_id" required>
+            {% for product in products %}
+                <option value="{{ product.id }}" 
+                    {% if product.quantity <= 0 %}disabled{% endif %}>
+                    {{ product.brand }} {{ product.name }} ({{ product.presentation }})
+                    - Stock: {{ product.quantity }}
+                    {% if product.quantity <= 0 %}(AGOTADO){% endif %}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+    
+    <div class="form-group">
+        <label for="exit_type">Tipo de Salida:</label>
+        <select class="form-control" name="exit_type" required>
+            <option value="individual">1 Unidad</option>
+            <option value="tobo">Tobo (12 unidades)</option>
+            <option value="media_caja">Media Caja (18 unidades)</option>
+            <option value="caja">Caja Completa (36 unidades)</option>
+        </select>
+    </div>
+    
+    <button type="submit" class="btn btn-primary">Registrar Salida</button>
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancelar</a>
+</form>
+{% endblock %}

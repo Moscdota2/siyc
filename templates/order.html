@@ -1,22 +1,66 @@
-<h1>Pedido de la Mesa {{ order.table.number }}</h1>
-<p>Estado: {{ order.status }}</p>
-<p>Total: ${{ order.total_price }}</p>
+{% extends 'base.html' %}
 
-<h2>Productos en el Pedido:</h2>
-<ul>
+{% block title %}Pedido Mesa {{ order.table.number }}{% endblock %}
+
+{% block content %}
+<h1>Pedido Mesa {{ order.table.number }}</h1>
+<div class="card">
+    <div class="card-body">
+        <p><strong>Estado:</strong> 
+            {% if order.status == "pendiente" %}
+                <span style="color: orange;">Pendiente</span>
+            {% else %}
+                <span style="color: green;">Pagado</span>
+            {% endif %}
+        </p>
+        <p><strong>Total:</strong> ${{ "%.2f"|format(order.total_price) }}</p>
+    </div>
+</div>
+
+<h2>Productos</h2>
+<table>
+    <tr>
+        <th>Producto</th>
+        <th>Cantidad</th>
+        <th>Precio Unitario</th>
+        <th>Subtotal</th>
+    </tr>
     {% for item in order_details %}
-        <li>{{ item.quantity }}x {{ item.product.name }} - ${{ item.subtotal }}</li>
+    <tr>
+        <td>{{ item.product.name }}</td>
+        <td>{{ item.quantity }}</td>
+        <td>${{ "%.2f"|format(item.subtotal/item.quantity) }}</td>
+        <td>${{ "%.2f"|format(item.subtotal) }}</td>
+    </tr>
     {% endfor %}
-</ul>
+    <tr>
+        <td colspan="3"><strong>Total</strong></td>
+        <td><strong>${{ "%.2f"|format(order.total_price) }}</strong></td>
+    </tr>
+</table>
 
+{% if order.status == "pendiente" %}
+<h3>Agregar Productos</h3>
 <form action="{{ url_for('add_product', order_id=order.id) }}" method="POST">
-    <select name="product_id">
-        {% for product in products %}
-            <option value="{{ product.id }}">{{ product.name }} - ${{ product.price_usd }}</option>
-        {% endfor %}
-    </select>
-    <input type="number" name="quantity" min="1" required>
-    <button type="submit">Agregar Producto</button>
+    <div class="form-group">
+        <select name="product_id" class="form-control" required>
+            {% for product in products %}
+                <option value="{{ product.id }}">
+                    {{ product.name }} - ${{ "%.2f"|format(product.price_usd) }} (Stock: {{ product.quantity }})
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-group">
+        <input type="number" name="quantity" min="1" class="form-control" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Agregar</button>
 </form>
 
-<a href="{{ url_for('close_order', order_id=order.id) }}">Cerrar Pedido</a>
+<a href="{{ url_for('close_order', order_id=order.id) }}" class="btn btn-success">
+    Cerrar Pedido y Pagar
+</a>
+{% endif %}
+
+<a href="{{ url_for('view_tables') }}" class="btn btn-secondary">Volver a Mesas</a>
+{% endblock %}

@@ -1,30 +1,36 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Editar Producto</title>
-</head>
-<body>
-    <h1>Editar Producto</h1>
-    <form action="/update_product/{{ product.id }}" method="POST">
-        <label for="name">Nombre del Producto:</label>
-        <input type="text" name="name" value="{{ product.name }}" required><br>
+{% extends 'base.html' %}
 
+{% block title %}Editar {{ product.name }}{% endblock %}
+
+{% block content %}
+<h1>Editar Producto</h1>
+<form method="POST">
+    <div class="form-group">
+        <label for="name">Nombre:</label>
+        <input type="text" name="name" class="form-control" value="{{ product.name }}" required>
+    </div>
+    <div class="form-group">
+        <label for="brand">Marca:</label>
+        <input type="text" name="brand" class="form-control" value="{{ product.brand }}" required>
+    </div>
+    <div class="form-group">
         <label for="category">Categoría:</label>
-        <input type="text" name="category" value="{{ product.category }}" required><br>
-
+        <input type="text" name="category" class="form-control" value="{{ product.category }}" required>
+    </div>
+    <div class="form-group">
+        <label for="presentation">Presentación:</label>
+        <input type="text" name="presentation" class="form-control" value="{{ product.presentation }}" required>
+    </div>
+    <div class="form-group">
         <label for="quantity">Cantidad:</label>
-        <input type="number" name="quantity" value="{{ product.quantity }}" required><br>
-
-        <label for="price_usd">Precio en USD:</label>
-        <input type="number" step="0.01" name="price_usd" value="{{ product.price_usd }}" required><br>
-
-        <label for="price_bs">Precio en Bolívares:</label>
-        <input type="number" step="0.01" name="price_bs" value="{{ product.price_bs }}" required><br>
-
-        <input type="submit" value="Actualizar Producto">
-    </form>
-    <a href="/">Volver</a>
-</body>
-</html>
+        <input type="number" name="quantity" class="form-control" value="{{ product.quantity }}" min="0" required>
+    </div>
+    <div class="form-group">
+        <label for="price_usd">Precio USD:</label>
+        <input type="number" step="0.01" name="price_usd" class="form-control" value="{{ product.price_usd }}" min="0" required>
+    </div>
+    
+    <button type="submit" class="btn btn-primary">Actualizar</button>
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancelar</a>
+</form>
+{% endblock %}

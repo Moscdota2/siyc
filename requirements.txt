@@ -3,3 +3,5 @@ flask
 flask_sqlalchemy
 pyDolarVenezuela
 requests
+flask-login
+flask-bcrypt

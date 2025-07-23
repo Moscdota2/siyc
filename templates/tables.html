@@ -1,13 +1,40 @@
+{% extends 'base.html' %}
+
+{% block title %}Gestión de Mesas{% endblock %}
+
+{% block content %}
 <h1>Mesas</h1>
-<ul>
+
+<table>
+    <tr>
+        <th>Mesa</th>
+        <th>Estado</th>
+        <th>Acciones</th>
+    </tr>
     {% for table in tables %}
-        <li>
-            Mesa {{ table.number }} - Estado: {{ table.status }}
+    <tr>
+        <td>Mesa {{ table.number }}</td>
+        <td>
             {% if table.status == "disponible" %}
-                <a href="{{ url_for('create_order', table_id=table.id) }}">Crear Pedido</a>
+                <span style="color: green;">Disponible</span>
+            {% elif table.status == "ocupada" %}
+                <span style="color: orange;">Ocupada</span>
             {% else %}
-                <a href="{{ url_for('view_order', order_id=table.orders[0].id) }}">Ver Pedido</a>
+                <span style="color: red;">{{ table.status|capitalize }}</span>
             {% endif %}
-        </li>
+        </td>
+        <td>
+            {% if table.status == "disponible" %}
+                <a href="{{ url_for('create_order', table_id=table.id) }}" class="btn btn-primary">
+                    Crear Pedido
+                </a>
+            {% else %}
+                <a href="{{ url_for('view_order', order_id=table.orders[0].id) }}" class="btn btn-secondary">
+                    Ver Pedido
+                </a>
+            {% endif %}
+        </td>
+    </tr>
     {% endfor %}
-</ul>
+</table>
+{% endblock %}
