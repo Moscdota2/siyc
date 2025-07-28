@@ -124,6 +124,7 @@ def delete_product(id):
         flash(f'Error al eliminar producto: {str(e)}', 'danger')
     return redirect(url_for('index'))
 
+# En la ruta de inventory_entry
 @app.route('/inventory_entry', methods=['GET', 'POST'])
 @manager_or_admin_required
 def inventory_entry():
@@ -131,9 +132,13 @@ def inventory_entry():
         product_id = request.form['product_id']
         boxes = float(request.form['boxes'])
         product_type = request.form.get('product_type', '')
+        currency = request.form['currency']  # 'usd' o 'bs'
+        purchase_price = float(request.form['purchase_price'])
+        distributor = request.form['distributor']  # 'polar' o 'regional'
         
         product = Product.query.get_or_404(product_id)
         
+        # Calcular unidades por caja según tipo de producto
         if product_type == 'cerveza':
             units_per_box = 36
         elif product_type == 'ron':
@@ -143,21 +148,46 @@ def inventory_entry():
         
         units = int(boxes * units_per_box)
         
+        # Calcular precio en dólares según moneda de pago y distribuidor
+        if currency == 'bs':
+            if distributor == 'polar':
+                # Polar en BS: $20.80 por caja
+                usd_price_per_box = 20.80
+            else:
+                # Regional en BS: $19.50 por caja
+                usd_price_per_box = 19.50
+        else:
+            if distributor == 'polar':
+                # Polar en USD: $17 por caja
+                usd_price_per_box = 17.00
+            else:
+                # Regional en USD: $19 por caja
+                usd_price_per_box = 19.00
+        
+        total_usd_investment = boxes * usd_price_per_box
+        
+        # Actualizar inventario
         product.quantity += units
         product.box_quantity += boxes
         
+        # Registrar movimiento con detalles financieros
         movement = InventoryMovement(
             product_id=product.id,
             user_id=current_user.id,
             movement_type='entrada',
             quantity=units,
-            notes=f"Entrada de {boxes} cajas de {product.name} ({units} unidades)"
+            currency=currency,
+            purchase_price=purchase_price,
+            usd_price_per_box=usd_price_per_box,
+            total_usd_investment=total_usd_investment,
+            distributor=distributor,
+            notes=f"Entrada de {boxes} cajas de {product.name} ({units} unidades) | {distributor} | {currency.upper()}"
         )
         
         try:
             db.session.add(movement)
             db.session.commit()
-            flash(f"✅ {units} unidades de {product.name} agregadas", 'success')
+            flash(f"✅ {units} unidades de {product.name} agregadas | Inversión: ${total_usd_investment:.2f}", 'success')
         except Exception as e:
             db.session.rollback()
             flash(f"Error al registrar entrada: {str(e)}", 'danger')
@@ -170,8 +200,22 @@ def inventory_entry():
     
     return render_template(
         'inventory_entry.html',
-        products=beers + rums
+        products=beers + rums,
+        precio_bcv=precio_bcv_actual
     )
+
+# Necesitaríamos también una nueva ruta para reportes de inversión
+@app.route('/inventory_investment_report')
+@manager_or_admin_required
+def inventory_investment_report():
+    movements = InventoryMovement.query.filter_by(movement_type='entrada')\
+        .order_by(InventoryMovement.movement_date.desc()).all()
+    
+    total_investment = sum(m.total_usd_investment for m in movements if m.total_usd_investment)
+    
+    return render_template('inventory_investment_report.html', 
+                         movements=movements,
+                         total_investment=total_investment)
 
 @app.route('/inventory_exit', methods=['GET', 'POST'])
 @login_required
@@ -373,6 +417,10 @@ def edit_movement(movement_id):
 
 if __name__ == '__main__':
     with app.app_context():
+    # Eliminar todas las tablas (solo en desarrollo!)
+        db.drop_all()
+        
+        # Crear todas las tablas con los nuevos esquemas
         db.create_all()
         
         # Crear usuarios iniciales
