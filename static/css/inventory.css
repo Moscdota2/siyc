@@ -7,6 +7,7 @@
     --light-color: #ecf0f1;
     --success-color: #2ecc71;
     --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --error-color: #dc3545;
 }
 
 /* Estructura principal */
@@ -116,30 +117,31 @@
     color: var(--dark-color);
 }
 
-/* Inputs animados */
+/* Inputs animados - Versión mejorada */
 .animated-input {
     position: relative;
-    padding-top: 20px;
+    margin-bottom: 1.5rem;
 }
 
 .animated-input .input-label {
     position: absolute;
-    top: 30px;
-    left: 12px;
+    top: 50%;
+    left: 15px;
+    transform: translateY(-50%);
     color: #999;
     transition: all 0.3s ease;
     pointer-events: none;
-    background: white;
+    background: transparent;
     padding: 0 5px;
 }
 
 .animated-input.focused .input-label,
-.animated-input input:focus + .input-label,
-.animated-input input:not(:placeholder-shown) + .input-label,
 .animated-input select:focus + .input-label,
 .animated-input select:valid + .input-label {
-    top: 10px;
+    top: 0;
+    transform: translateY(-50%);
     font-size: 0.8rem;
+    background: white;
     color: var(--primary-color);
 }
 
@@ -150,11 +152,37 @@
     border-radius: 6px;
     font-size: 1rem;
     transition: border-color 0.3s ease;
+    background-color: white;
+}
+
+.animated-input select {
+    appearance: none;
+    padding-right: 30px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23333' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px;
 }
 
 .animated-input .form-control:focus {
     border-color: var(--primary-color);
     outline: none;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.animated-input.error .form-control {
+    border-color: var(--error-color);
+}
+
+.error-message {
+    color: var(--error-color);
+    font-size: 0.8rem;
+    margin-top: 5px;
+    display: none;
+}
+
+.animated-input.error .error-message {
+    display: block;
 }
 
 .input-hint {
@@ -164,12 +192,13 @@
     margin-top: 5px;
 }
 
-/* Selectores de moneda y distribuidor */
+/* Selectores de moneda y distribuidor - Versión mejorada */
 .currency-toggle {
     display: flex;
     border-radius: 6px;
     overflow: hidden;
     border: 1px solid #ddd;
+    height: 42px;
 }
 
 .currency-btn {
@@ -179,6 +208,9 @@
     background: #f8f9fa;
     cursor: pointer;
     transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .currency-btn.active {
@@ -204,6 +236,8 @@
 .distributor-btn input {
     position: absolute;
     opacity: 0;
+    width: 0;
+    height: 0;
 }
 
 .distributor-btn .btn-content {
@@ -216,6 +250,8 @@
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.3s ease;
+    text-align: center;
+    min-height: 80px;
 }
 
 .distributor-btn input:checked + .btn-content {
@@ -223,9 +259,11 @@
     background-color: rgba(52, 152, 219, 0.1);
 }
 
-.distributor-btn i {
-    font-size: 1.2rem;
-    margin-bottom: 5px;
+.distributor-icon {
+    width: 24px;
+    height: 24px;
+    margin-bottom: 8px;
+    object-fit: contain;
 }
 
 /* Botones de submit */
@@ -243,6 +281,10 @@
     justify-content: center;
     gap: 10px;
     margin-top: 1.5rem;
+}
+
+.submit-btn i {
+    font-size: 1rem;
 }
 
 .beer-btn {
@@ -274,6 +316,10 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+    .inventory-container {
+        padding: 1rem;
+    }
+    
     .inventory-grid {
         grid-template-columns: 1fr;
     }
@@ -281,4 +327,37 @@
     .form-row {
         flex-direction: column;
     }
+    
+    .card-header {
+        flex-direction: column;
+        text-align: center;
+        gap: 10px;
+    }
+    
+    .badge {
+        margin-left: 0;
+        margin-top: 10px;
+    }
+    
+    .distributor-btn .btn-content {
+        min-height: 60px;
+        padding: 8px;
+    }
+}
+
+/* Estilos adicionales para iconos personalizados */
+.custom-icon {
+    font-size: 16px;
+    color: #2c3e50;
+    margin-bottom: 5px;
+}
+
+/* Flecha personalizada para selects */
+.select-arrow {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: #555;
 }

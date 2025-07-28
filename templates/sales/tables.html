@@ -29,7 +29,7 @@
                     Crear Pedido
                 </a>
             {% else %}
-                <a href="{{ url_for('view_order', order_id=table.orders[0].id) }}" class="btn btn-secondary">
+                <a href="{{ url_for('view_order', table_id=table.id) }}" class="btn btn-secondary">
                     Ver Pedido
                 </a>
             {% endif %}

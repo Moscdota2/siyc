@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+
+{% block title %}Reportes de Ventas{% endblock %}
+
+{% block content %}
+<div class="reports-container">
+    <h1>Reportes de Ventas</h1>
+    
+    <div class="summary-card">
+        <h2>Resumen</h2>
+        <p>Total de ventas: ${{ "%.2f"|format(total_sales) }}</p>
+        <p>Número de pedidos: {{ orders|length }}</p>
+    </div>
+    
+    <table class="sales-table">
+        <tr>
+            <th>ID Pedido</th>
+            <th>Mesa</th>
+            <th>Total</th>
+            <th>Fecha</th>
+        </tr>
+        {% for order in orders %}
+        <tr>
+            <td>{{ order.id }}</td>
+            <td>Mesa {{ order.table.number }}</td>
+            <td>${{ "%.2f"|format(order.total_price) }}</td>
+            <td>{{ order.closed_at.strftime('%d/%m/%Y %H:%M') if order.closed_at else 'N/A' }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

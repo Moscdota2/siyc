@@ -41,7 +41,8 @@
 
 {% if order.status == "pendiente" %}
 <h3>Agregar Productos</h3>
-<form action="{{ url_for('add_product', order_id=order.id) }}" method="POST">
+<!-- CAMBIO IMPORTANTE: Cambiar order_id por table_id -->
+<form action="{{ url_for('add_product', table_id=table.id) }}" method="POST">
     <div class="form-group">
         <select name="product_id" class="form-control" required>
             {% for product in products %}
@@ -57,9 +58,7 @@
     <button type="submit" class="btn btn-primary">Agregar</button>
 </form>
 
-<a href="{{ url_for('close_order', order_id=order.id) }}" class="btn btn-success">
-    Cerrar Pedido y Pagar
-</a>
+<a href="{{ url_for('close_order', table_id=table.id) }}" class="btn btn-success">Cerrar Pedido</a>
 {% endif %}
 
 <a href="{{ url_for('view_tables') }}" class="btn btn-secondary">Volver a Mesas</a>

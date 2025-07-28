@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block title %}Histórico de Movimientos{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Histórico Completo de Movimientos</h2>
+    
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Producto</th>
+                    <th>Categoría</th>
+                    <th>Tipo</th>
+                    <th>Cantidad</th>
+                    <th>Detalles</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mov in movements %}
+                <tr>
+                    <td>{{ mov.movement_date.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td>{{ mov.product.name }}</td>
+                    <td>{{ mov.product.category }}</td>
+                   <td>
+                        {% if mov.movement_type == 'entrada' %}
+                            <span style="color: green;">Entrada</span>
+                        {% else %}
+                            <span style="color: red;">{{ mov.exit_type|capitalize }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ mov.quantity }} und</td>
+                    <td>
+                        {{ mov.notes }}
+                        {% if mov.movement_type == 'entrada' %}
+                            <br><small>
+                                {{ mov.distributor }} | 
+                                {{ mov.currency|upper }}{{ mov.purchase_price }}
+                            </small>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

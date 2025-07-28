@@ -1,37 +1,85 @@
 {% extends 'base.html' %}
 
-{% block title %}Inventario{% endblock %}
+{% block title %}Dashboard{% endblock %}
 
 {% block content %}
-<h1>Inventario de Productos</h1>
-{% if current_user.role == 'admin' %}
-    <a href="/create_product" class="btn btn-primary">Agregar nuevo producto</a>
-{% endif %}
+<div class="dashboard">
+    <h1>Dashboard</h1>
+    
+    <div class="stats-container">
+        <div class="stat-card">
+            <h3>Stock Bajo</h3>
+            <p>{{ low_stock_count }}</p>
+        </div>
+        <div class="stat-card">
+            <h3>Mesas Ocupadas</h3>
+            <p>{{ occupied_tables }}/{{ total_tables }}</p>
+        </div>
+        <div class="stat-card">
+            <h3>Ventas Hoy</h3>
+            <p>${{ "%.2f"|format(daily_sales) }}</p>
+        </div>
+    </div>
 
-<table>
-    <tr>
-        <th>Nombre</th>
-        <th>Categoría</th>
-        <th>Stock</th>
-        <th>Precios</th>
-        {% if current_user.role == 'admin' %}
-            <th>Acciones</th>
-        {% endif %}
-    </tr>
-    {% for product in products %}
-    <tr {% if product.quantity < 10 %}style="background-color: #fff3cd;"{% endif %}>
-        <td>{{ product.name }}</td>
-        <td>{{ product.category }}</td>
-        <td>{{ product.quantity }} unidades</td>
-        <td>${{ "%.2f"|format(product.price_usd) }} / Bs{{ "%.2f"|format(product.price_bs) }}</td>
-        {% if current_user.role == 'admin' %}
-        <td>
-            <a href="/update_product/{{ product.id }}" class="btn btn-primary">Editar</a>
-            <a href="/delete_product/{{ product.id }}" class="btn btn-secondary" 
-               onclick="return confirm('¿Eliminar {{ product.name }}?')">Eliminar</a>
-        </td>
-        {% endif %}
-    </tr>
-    {% endfor %}
-</table>
+    <div class="charts">
+        <div class="chart-container">
+            <canvas id="salesChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="stockChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+// Gráfico de ventas
+const salesCtx = document.getElementById('salesChart').getContext('2d');
+const salesChart = new Chart(salesCtx, {
+    type: 'bar',
+    data: {
+        labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+        datasets: [{
+            label: 'Ventas semanales',
+            data: [120, 190, 150, 200, 180, 250, 300],
+            backgroundColor: 'rgba(54, 162, 235, 0.5)',
+            borderColor: 'rgba(54, 162, 235, 1)',
+            borderWidth: 1
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+
+// Gráfico de stock
+const stockCtx = document.getElementById('stockChart').getContext('2d');
+const stockChart = new Chart(stockCtx, {
+    type: 'pie',
+    data: {
+        labels: ['Cervezas', 'Rones', 'Otros'],
+        datasets: [{
+            data: [65, 25, 10],
+            backgroundColor: [
+                'rgba(255, 99, 132, 0.5)',
+                'rgba(54, 162, 235, 0.5)',
+                'rgba(255, 206, 86, 0.5)'
+            ],
+            borderColor: [
+                'rgba(255, 99, 132, 1)',
+                'rgba(54, 162, 235, 1)',
+                'rgba(255, 206, 86, 1)'
+            ],
+            borderWidth: 1
+        }]
+    },
+    options: {
+        responsive: true
+    }
+});
+</script>
 {% endblock %}

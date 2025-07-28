@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+
+{% block title %}Registrar Consumo{% endblock %}
+
+{% block content %}
+<div class="sales-container">
+    <h1>Registrar Consumo</h1>
+    
+    <div class="sales-nav">
+        <a href="{{ url_for('sales') }}" class="active">Consumo Directo</a>
+        <a href="{{ url_for('view_tables') }}">Mesas</a>
+        <a href="{{ url_for('inventory_history') }}">Reportes</a> <!-- Cambiado a inventory_history -->
+    </div>
+    
+    <div class="sales-content">
+        <form method="POST" class="sales-form" action="{{ url_for('register_sale') }}">
+            <div class="form-group">
+                <label>Tipo de Consumo:</label>
+                <div class="toggle-group">
+                    <input type="radio" id="type_mesa" name="sale_type" value="mesa" checked>
+                    <label for="type_mesa">Mesa</label>
+                    
+                    <input type="radio" id="type_barra" name="sale_type" value="barra">
+                    <label for="type_barra">Barra</label>
+                    
+                    <input type="radio" id="type_otro" name="sale_type" value="otro">
+                    <label for="type_otro">Otro</label>
+                </div>
+            </div>
+            
+            <div id="mesa_fields" class="sale-fields">
+                <div class="form-group">
+                    <label for="table_id">Mesa:</label>
+                    <select name="table_id" class="form-control" required>
+                        {% for table in tables if table.status == 'disponible' %}
+                            <option value="{{ table.id }}">Mesa {{ table.number }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="table_merge">Unir con mesa:</label>
+                    <select name="table_merge" class="form-control">
+                        <option value="">Ninguna</option>
+                        {% for table in tables if table.status == 'ocupada' %}
+                            <option value="{{ table.id }}">Mesa {{ table.number }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div id="barra_fields" class="sale-fields" style="display:none;">
+                <div class="form-group">
+                    <label for="customer_name">Nombre Cliente:</label>
+                    <input type="text" name="customer_name" class="form-control" required>
+                </div>
+            </div>
+            
+            <div class="product-selection">
+                <h3>Productos</h3>
+                <div id="product_items">
+                    <div class="product-item">
+                        <select name="product_id[]" class="form-control" required>
+                            {% for product in products if product.quantity > 0 %}
+                                <option value="{{ product.id }}" data-price="{{ product.price_usd }}">
+                                    {{ product.name }} (${{ "%.2f"|format(product.price_usd) }}) - Stock: {{ product.quantity }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <input type="number" name="quantity[]" min="1" value="1" max="1" class="form-control" required>
+                        <button type="button" class="btn-remove">×</button>
+                    </div>
+                </div>
+                <button type="button" id="add_product" class="btn-add">+ Agregar Producto</button>
+            </div>
+            
+            <div class="total-section">
+                <h4>Total: $<span id="total_amount">0.00</span></h4>
+            </div>
+            
+            <button type="submit" class="btn-submit">Registrar Consumo</button>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Mostrar/ocultar campos según tipo de consumo
+    document.querySelectorAll('input[name="sale_type"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            document.querySelectorAll('.sale-fields').forEach(field => {
+                field.style.display = 'none';
+            });
+            
+            if (this.value === 'mesa') {
+                document.getElementById('mesa_fields').style.display = 'block';
+                document.querySelector('[name="customer_name"]').removeAttribute('required');
+            } else if (this.value === 'barra') {
+                document.getElementById('barra_fields').style.display = 'block';
+                document.querySelector('[name="customer_name"]').setAttribute('required', '');
+            }
+        });
+    });
+
+    // Agregar más productos
+    document.getElementById('add_product').addEventListener('click', function() {
+        const productSelect = document.querySelector('[name="product_id[]"]');
+        if (!productSelect) return;
+        
+        const newItem = document.createElement('div');
+        newItem.className = 'product-item';
+        newItem.innerHTML = `
+            <select name="product_id[]" class="form-control" required>
+                {% for product in products if product.quantity > 0 %}
+                    <option value="{{ product.id }}" data-price="{{ product.price_usd }}">
+                    </option>
+                {% endfor %}
+            </select>
+            <input type="number" name="quantity[]" min="1" value="1" class="form-control" required>
+            <button type="button" class="btn-remove">×</button>
+        `;
+        document.getElementById('product_items').appendChild(newItem);
+        calculateTotal();
+    });
+
+    // Eliminar producto
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('btn-remove')) {
+            e.target.parentNode.remove();
+            calculateTotal();
+        }
+    });
+
+    // Calcular total cuando cambian cantidades o productos
+    document.addEventListener('input', function(e) {
+        if (e.target.name === 'quantity[]' || e.target.name === 'product_id[]') {
+            calculateTotal();
+        }
+    });
+
+    // Función para calcular el total
+    function calculateTotal() {
+        let total = 0;
+        document.querySelectorAll('.product-item').forEach(item => {
+            const select = item.querySelector('select[name="product_id[]"]');
+            const quantityInput = item.querySelector('input[name="quantity[]"]');
+            
+            if (select && quantityInput) {
+                const price = parseFloat(select.selectedOptions[0].dataset.price);
+                const quantity = parseInt(quantityInput.value) || 0;
+                total += price * quantity;
+            }
+        });
+        
+        document.getElementById('total_amount').textContent = total.toFixed(2);
+    }
+
+    // Calcular total inicial
+    calculateTotal();
+});
+</script>
+{% endblock %}

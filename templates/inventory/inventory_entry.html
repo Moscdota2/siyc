@@ -3,7 +3,6 @@
 {% block title %}Entrada de Inventario{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/inventory.css') }}">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 {% endblock %}
 
@@ -25,8 +24,8 @@
                 
                 <div class="form-group animated-input">
                     <select name="product_id" class="form-control" required>
-                        <option value="" disabled selected>Selecciona una cerveza</option>
-                        {% for product in products if product.category == 'Cerveza' %}
+                        <option value="" disabled selected></option>
+                        {% for product in products %}
                         <option value="{{ product.id }}">{{ product.brand }} {{ product.name }}</option>
                         {% endfor %}
                     </select>
@@ -61,14 +60,14 @@
                         <label class="distributor-btn">
                             <input type="radio" name="distributor" value="polar" checked>
                             <span class="btn-content">
-                                <i class="fas fa-industry"></i>
+                                <img src="{{ url_for('static', filename='images/polar.png') }}" alt="Polar" class="distributor-icon">
                                 Polar
                             </span>
                         </label>
                         <label class="distributor-btn">
                             <input type="radio" name="distributor" value="regional">
                             <span class="btn-content">
-                                <i class="fas fa-truck"></i>
+                                <img src="{{ url_for('static', filename='images/regional.png') }}" alt="Regional" class="distributor-icon">
                                 Regional
                             </span>
                         </label>
