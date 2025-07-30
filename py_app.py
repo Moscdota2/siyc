@@ -103,13 +103,30 @@ def create_product():
                 last_modified_by=current_user.id
             )
             db.session.add(new_product)
+            db.session.flush()
+
+            # Registrar movimiento de creación (NUEVO)
+            initial_quantity = int(request.form['quantity'])
+            creation_movement = InventoryMovement(
+                product_id=new_product.id,
+                user_id=current_user.id,
+                movement_type='entrada',
+                quantity=initial_quantity,
+                # is_initial_stock=True,  # Marcamos como stock inicial
+                notes=f"Creación de producto: {new_product.name}",
+                currency='usd',  # Valor por defecto
+                distributor='sistema'  # Valor especial
+            )
+            db.session.add(creation_movement)
+            
             db.session.commit()
-            flash('Producto creado exitosamente', 'success')
-            return redirect(url_for('index'))
+            flash('Producto creado con registro histórico', 'success')
+            return redirect(url_for('inventory'))
         except Exception as e:
             db.session.rollback()
-            flash(f'Error al crear producto: {str(e)}', 'danger')
+            flash(f'Error: {str(e)}', 'danger')
     return render_template('inventory/create_product.html')
+
 
 @app.route('/update_product/<int:id>', methods=['GET', 'POST'])
 @admin_required
@@ -434,11 +451,20 @@ def close_order(table_id):
     
     return redirect(url_for('view_tables'))
 
-# Auditoría
 @app.route('/inventory_history')
 @manager_or_admin_required
 def inventory_history():
-    movements = InventoryMovement.query.order_by(InventoryMovement.movement_date.desc()).all()
+    movements = db.session.query(
+        InventoryMovement,
+        Product
+    ).join(
+        Product, InventoryMovement.product_id == Product.id
+    ).options(
+        db.contains_eager(InventoryMovement.product)
+    ).order_by(
+        InventoryMovement.movement_date.desc()
+    ).all()
+    
     return render_template('inventory/inventory_history.html', movements=movements)
 
 @app.route('/edit_movement/<int:movement_id>', methods=['GET', 'POST'])

@@ -21,23 +21,23 @@
             <tbody>
                 {% for mov in movements %}
                 <tr>
-                    <td>{{ mov.movement_date.strftime('%d/%m/%Y %H:%M') }}</td>
-                    <td>{{ mov.product.name }}</td>
-                    <td>{{ mov.product.category }}</td>
-                   <td>
-                        {% if mov.movement_type == 'entrada' %}
+                    <td>{{ mov.InventoryMovement.movement_date.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td>{{ mov.Product.name }}</td>
+                    <td>{{ mov.Product.category }}</td>
+                    <td>
+                        {% if mov.InventoryMovement.movement_type == 'entrada' %}
                             <span style="color: green;">Entrada</span>
                         {% else %}
-                            <span style="color: red;">{{ mov.exit_type|capitalize }}</span>
+                            <span style="color: red;">{{ mov.InventoryMovement.exit_type|capitalize }}</span>
                         {% endif %}
                     </td>
-                    <td>{{ mov.quantity }} und</td>
+                    <td>{{ mov.InventoryMovement.quantity }} und</td>
                     <td>
-                        {{ mov.notes }}
-                        {% if mov.movement_type == 'entrada' %}
+                        {{ mov.InventoryMovement.notes }}
+                        {% if mov.InventoryMovement.movement_type == 'entrada' %}
                             <br><small>
-                                {{ mov.distributor }} | 
-                                {{ mov.currency|upper }}{{ mov.purchase_price }}
+                                {{ mov.InventoryMovement.distributor }} | 
+                                {{ mov.InventoryMovement.currency|upper }}{{ mov.InventoryMovement.purchase_price }}
                             </small>
                         {% endif %}
                     </td>
