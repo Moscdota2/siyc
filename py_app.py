@@ -389,7 +389,6 @@ def view_order(table_id):
                          order_details=order_details, 
                          products=products,
                          table=table)
-
 @app.route('/add_product/<int:table_id>', methods=['POST'])
 @login_required
 def add_product(table_id):
@@ -415,13 +414,28 @@ def add_product(table_id):
         exit_type='individual'
     )
     
+    # Actualizar total de la orden
     active_order.total_price += subtotal
+    
+    # Descontar del inventario INMEDIATAMENTE
     product.quantity -= quantity
+    
+    # Registrar movimiento de inventario
+    movement = InventoryMovement(
+        product_id=product.id,
+        user_id=current_user.id,
+        movement_type='salida',
+        quantity=quantity,
+        exit_type='venta',
+        notes=f'Despachado en orden #{active_order.id} (pendiente de pago)',
+        is_locked=True  # Bloquear para que no se pueda modificar
+    )
     
     try:
         db.session.add(order_detail)
+        db.session.add(movement)
         db.session.commit()
-        flash(f'{quantity}x {product.name} agregado al pedido', 'success')
+        flash(f'{quantity}x {product.name} despachado y agregado al pedido', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error al agregar producto: {str(e)}', 'danger')
@@ -429,9 +443,8 @@ def add_product(table_id):
     return redirect(url_for('view_order', table_id=table_id))
 
 @app.route('/close_order/<int:table_id>')
-@login_required
+@admin_required  # Solo admin puede marcar como pagado
 def close_order(table_id):
-    # Obtener la orden activa para esta mesa
     active_order = Order.query.filter_by(table_id=table_id, status="pendiente").first()
     if not active_order:
         flash('No hay pedido activo para esta mesa', 'danger')
@@ -439,12 +452,22 @@ def close_order(table_id):
     
     table = active_order.table
     
+    # Cambiar estado a "pagado"
     active_order.status = "pagado"
+    active_order.closed_at = datetime.utcnow()
     table.status = "disponible"
+    
+    # Actualizar los movimientos de inventario para marcarlos como pagados
+    movements = InventoryMovement.query.filter(
+        InventoryMovement.notes.like(f'%orden #{active_order.id}%')
+    ).all()
+    
+    for mov in movements:
+        mov.notes = mov.notes.replace('(pendiente de pago)', '(pagado)')
     
     try:
         db.session.commit()
-        flash(f'Pedido #{active_order.id} cerrado. Mesa {table.number} liberada', 'success')
+        flash(f'Pedido #{active_order.id} marcado como PAGADO. Mesa {table.number} liberada', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error al cerrar pedido: {str(e)}', 'danger')
@@ -510,15 +533,26 @@ def sales():
         elif sale_type == 'barra':
             customer_name = request.form.get('customer_name', 'Consumo en barra')
             # Procesar orden para barra
-        
-        # Procesar productos
-        # ...
-        
+
         return redirect(url_for('sales'))
     
-    products = Product.query.filter(Product.quantity > 0).all()
-    tables = Table.query.all()
-    return render_template('sales/sales.html', products=products, tables=tables)
+    # Obtener productos y mesas
+    products = [{
+        'id': p.id,
+        'name': p.name,
+        'price_usd': float(p.price_usd),
+        'quantity': p.quantity
+    } for p in Product.query.filter(Product.quantity > 0).all()]
+    
+    tables = [{
+        'id': t.id,
+        'number': t.number,
+        'status': t.status
+    } for t in Table.query.all()]
+    
+    return render_template('sales/sales.html', 
+                         products=products, 
+                         tables=tables)
 
 
 
@@ -548,10 +582,26 @@ def register_sale():
             # Crear nueva orden
             if sale_type == 'mesa':
                 table_id = request.form['table_id']
-                new_order = Order(table_id=table_id)
+                table = Table.query.get_or_404(table_id)
+                if table.status != "disponible":
+                    flash('La mesa ya está ocupada', 'danger')
+                    return redirect(url_for('sales'))
+                
+                new_order = Order(
+                    table_id=table_id,
+                    status="pendiente",
+                    waiter_id=current_user.id
+                )
+                table.status = "ocupada"
+                db.session.add(table)  # Asegurarse de que la mesa se actualice
             else:
                 customer_name = request.form.get('customer_name', 'Consumo en barra')
-                new_order = Order(customer_name=customer_name)
+                new_order = Order(
+                    customer_name=customer_name,
+                    status="pendiente",
+                    waiter_id=current_user.id,
+                    table_id=None  # Asegurarse de que no tenga mesa asociada
+                )
             
             db.session.add(new_order)
             db.session.flush()  # Para obtener el ID de la orden
@@ -564,6 +614,7 @@ def register_sale():
                 
                 if product.quantity < quantity:
                     flash(f'Stock insuficiente de {product.name}', 'danger')
+                    db.session.rollback()
                     return redirect(url_for('sales'))
                 
                 subtotal = product.price_usd * quantity
@@ -580,23 +631,139 @@ def register_sale():
                 # Actualizar inventario
                 product.quantity -= quantity
                 db.session.add(order_detail)
+                
+                # Registrar movimiento de inventario
+                movement = InventoryMovement(
+                    product_id=product.id,
+                    user_id=current_user.id,
+                    movement_type='salida',
+                    quantity=quantity,
+                    exit_type='venta',
+                    notes=f'Despachado en orden #{new_order.id} (pendiente de pago)',
+                    is_locked=True
+                )
+                db.session.add(movement)
             
             # Actualizar total de la orden
             new_order.total_price = total
             
-            # Si es una mesa, marcarla como ocupada
-            if sale_type == 'mesa':
-                table = Table.query.get_or_404(request.form['table_id'])
-                table.status = "ocupada"
-            
             db.session.commit()
-            flash('Venta registrada exitosamente', 'success')
-            return redirect(url_for('sales'))
+            flash('Orden creada exitosamente', 'success')
+            
+            # Redirigir a la vista de la orden recién creada
+            if sale_type == 'mesa':
+                return redirect(url_for('view_order', table_id=table_id))
+            else:
+                return redirect(url_for('view_bar_order', order_id=new_order.id))
             
         except Exception as e:
             db.session.rollback()
-            flash(f'Error al registrar venta: {str(e)}', 'danger')
+            flash(f'Error al registrar orden: {str(e)}', 'danger')
             return redirect(url_for('sales'))
+
+@app.route('/bar_order/<int:order_id>')
+@login_required
+def view_bar_order(order_id):
+    order = Order.query.get_or_404(order_id)
+    
+    if order.status != "pendiente":
+        flash('Esta orden ya ha sido pagada', 'warning')
+        return redirect(url_for('sales_reports'))
+    
+    order_details = OrderDetail.query.filter_by(order_id=order.id).all()
+    products = Product.query.filter(Product.quantity > 0).all()
+    
+    return render_template('sales/order.html', 
+                         order=order, 
+                         order_details=order_details, 
+                         products=products,
+                         is_bar_order=True)  # Añadimos este flag
+
+
+@app.route('/add_product_to_bar_order/<int:order_id>', methods=['POST'])
+@login_required
+def add_product_to_bar_order(order_id):
+    order = Order.query.get_or_404(order_id)
+    
+    if order.status != "pendiente":
+        flash('No se pueden agregar productos a una orden pagada', 'danger')
+        return redirect(url_for('view_bar_order', order_id=order_id))
+    
+    product = Product.query.get_or_404(request.form['product_id'])
+    quantity = int(request.form['quantity'])
+    
+    if product.quantity < quantity:
+        flash(f'Stock insuficiente de {product.name}', 'danger')
+        return redirect(url_for('view_bar_order', order_id=order_id))
+    
+    subtotal = product.price_usd * quantity
+    order_detail = OrderDetail(
+        order_id=order.id,
+        product_id=product.id,
+        quantity=quantity,
+        subtotal=subtotal,
+        exit_type='individual'
+    )
+    
+    # Actualizar total de la orden
+    order.total_price += subtotal
+    
+    # Descontar del inventario
+    product.quantity -= quantity
+    
+    # Registrar movimiento de inventario
+    movement = InventoryMovement(
+        product_id=product.id,
+        user_id=current_user.id,
+        movement_type='salida',
+        quantity=quantity,
+        exit_type='venta',
+        notes=f'Despachado en orden #{order.id} (pendiente de pago)',
+        is_locked=True
+    )
+    
+    try:
+        db.session.add(order_detail)
+        db.session.add(movement)
+        db.session.commit()
+        flash(f'{quantity}x {product.name} agregado a la orden', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al agregar producto: {str(e)}', 'danger')
+    
+    return redirect(url_for('view_bar_order', order_id=order_id))
+
+
+@app.route('/close_bar_order/<int:order_id>', methods=['POST'])
+@admin_required
+def close_bar_order(order_id):
+    order = Order.query.get_or_404(order_id)
+    
+    if order.status != "pendiente":
+        flash('Esta orden ya ha sido pagada', 'warning')
+        return redirect(url_for('view_bar_order', order_id=order_id))
+    
+    # Cambiar estado a "pagado"
+    order.status = "pagado"
+    order.closed_at = datetime.utcnow()
+    order.payment_method = request.form['payment_method']
+    
+    # Actualizar los movimientos de inventario para marcarlos como pagados
+    movements = InventoryMovement.query.filter(
+        InventoryMovement.notes.like(f'%orden #{order.id}%')
+    ).all()
+    
+    for mov in movements:
+        mov.notes = mov.notes.replace('(pendiente de pago)', '(pagado)')
+    
+    try:
+        db.session.commit()
+        flash(f'Orden #{order.id} marcada como PAGADA', 'success')
+        return redirect(url_for('sales_reports'))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al cerrar orden: {str(e)}', 'danger')
+        return redirect(url_for('view_bar_order', order_id=order_id))
 
 if __name__ == '__main__':
     with app.app_context():

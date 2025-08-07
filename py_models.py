@@ -43,11 +43,16 @@ class Table(db.Model):
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    table_id = db.Column(db.Integer, db.ForeignKey('table.id'), nullable=False)
+    table_id = db.Column(db.Integer, db.ForeignKey('table.id'), nullable=True)
     total_price = db.Column(db.Float, nullable=False, default=0.0)
     status = db.Column(db.String(20), nullable=False, default="pendiente")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    closed_at = db.Column(db.DateTime, nullable=True)
     products = db.relationship('OrderDetail', backref='order', lazy=True)
+    customer_name = db.Column(db.String(100), nullable=True)
+    waiter_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    waiter = db.relationship('User', backref='orders')
+    payment_method = db.Column(db.String(20), nullable=True)
 
 class OrderDetail(db.Model):
     id = db.Column(db.Integer, primary_key=True)

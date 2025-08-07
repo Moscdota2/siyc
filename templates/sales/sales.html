@@ -9,11 +9,12 @@
     <div class="sales-nav">
         <a href="{{ url_for('sales') }}" class="active">Consumo Directo</a>
         <a href="{{ url_for('view_tables') }}">Mesas</a>
-        <a href="{{ url_for('inventory_history') }}">Reportes</a> <!-- Cambiado a inventory_history -->
+        <a href="{{ url_for('inventory_history') }}">Reportes</a>
+        <a href="{{ url_for('sales_reports') }}">Reportes de Venta</a>
     </div>
     
     <div class="sales-content">
-        <form method="POST" class="sales-form" action="{{ url_for('register_sale') }}">
+        <form method="POST" class="sales-form" id="salesForm">
             <div class="form-group">
                 <label>Tipo de Consumo:</label>
                 <div class="toggle-group">
@@ -22,9 +23,6 @@
                     
                     <input type="radio" id="type_barra" name="sale_type" value="barra">
                     <label for="type_barra">Barra</label>
-                    
-                    <input type="radio" id="type_otro" name="sale_type" value="otro">
-                    <label for="type_otro">Otro</label>
                 </div>
             </div>
             
@@ -37,21 +35,12 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="form-group">
-                    <label for="table_merge">Unir con mesa:</label>
-                    <select name="table_merge" class="form-control">
-                        <option value="">Ninguna</option>
-                        {% for table in tables if table.status == 'ocupada' %}
-                            <option value="{{ table.id }}">Mesa {{ table.number }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
             </div>
             
             <div id="barra_fields" class="sale-fields" style="display:none;">
                 <div class="form-group">
                     <label for="customer_name">Nombre Cliente:</label>
-                    <input type="text" name="customer_name" class="form-control" required>
+                    <input type="text" name="customer_name" class="form-control">
                 </div>
             </div>
             
@@ -59,14 +48,15 @@
                 <h3>Productos</h3>
                 <div id="product_items">
                     <div class="product-item">
-                        <select name="product_id[]" class="form-control" required>
+                        <select name="product_id[]" class="form-control product-select" required>
+                            <option value="">Seleccione un producto</option>
                             {% for product in products if product.quantity > 0 %}
-                                <option value="{{ product.id }}" data-price="{{ product.price_usd }}">
+                                <option value="{{ product.id }}" data-price="{{ product.price_usd }}" data-stock="{{ product.quantity }}">
                                     {{ product.name }} (${{ "%.2f"|format(product.price_usd) }}) - Stock: {{ product.quantity }}
                                 </option>
                             {% endfor %}
                         </select>
-                        <input type="number" name="quantity[]" min="1" value="1" max="1" class="form-control" required>
+                        <input type="number" name="quantity[]" min="1" value="1" class="form-control quantity-input" required>
                         <button type="button" class="btn-remove">×</button>
                     </div>
                 </div>
@@ -77,8 +67,16 @@
                 <h4>Total: $<span id="total_amount">0.00</span></h4>
             </div>
             
-            <button type="submit" class="btn-submit">Registrar Consumo</button>
+            <button type="submit" class="btn-submit">Crear Orden</button>
         </form>
+        
+        <!-- Sección de previsualización -->
+        <div id="sale_preview" style="display: none; margin-top: 30px;">
+            <h3>Resumen de Venta</h3>
+            <div id="preview_content"></div>
+            <button type="button" id="confirm_sale" class="btn-confirm">Confirmar Venta</button>
+            <button type="button" id="cancel_sale" class="btn-cancel">Cancelar</button>
+        </div>
     </div>
 </div>
 
@@ -93,34 +91,31 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (this.value === 'mesa') {
                 document.getElementById('mesa_fields').style.display = 'block';
-                document.querySelector('[name="customer_name"]').removeAttribute('required');
             } else if (this.value === 'barra') {
                 document.getElementById('barra_fields').style.display = 'block';
-                document.querySelector('[name="customer_name"]').setAttribute('required', '');
             }
         });
     });
 
     // Agregar más productos
     document.getElementById('add_product').addEventListener('click', function() {
-        const productSelect = document.querySelector('[name="product_id[]"]');
-        if (!productSelect) return;
-        
         const newItem = document.createElement('div');
-        newItem.className = 'product-item';
-        newItem.innerHTML = `
-            <select name="product_id[]" class="form-control" required>
-                {% for product in products if product.quantity > 0 %}
-                    <option value="{{ product.id }}" data-price="{{ product.price_usd }}">
-                    </option>
-                {% endfor %}
-            </select>
-            <input type="number" name="quantity[]" min="1" value="1" class="form-control" required>
-            <button type="button" class="btn-remove">×</button>
-        `;
-        document.getElementById('product_items').appendChild(newItem);
-        calculateTotal();
-    });
+            newItem.className = 'product-item';
+            newItem.innerHTML = `
+                <select name="product_id[]" class="form-control product-select" required>
+                    <option value="">Seleccione un producto</option>
+                    ${products.map(p => `
+                        <option value="${p.id}" data-price="${p.price_usd}" data-stock="${p.quantity}">
+                            ${p.name} ($${p.price_usd.toFixed(2)}) - Stock: ${p.quantity}
+                        </option>
+                    `).join('')}
+                </select>
+                <input type="number" name="quantity[]" min="1" value="1" class="form-control quantity-input" required>
+                <button type="button" class="btn-remove">×</button>
+            `;
+            document.getElementById('product_items').appendChild(newItem);
+            calculateTotal();
+        });
 
     // Eliminar producto
     document.addEventListener('click', function(e) {
@@ -132,19 +127,32 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Calcular total cuando cambian cantidades o productos
     document.addEventListener('input', function(e) {
-        if (e.target.name === 'quantity[]' || e.target.name === 'product_id[]') {
+        if (e.target.classList.contains('quantity-input') || e.target.classList.contains('product-select')) {
+            updateMaxQuantity(e.target);
             calculateTotal();
         }
     });
+
+    // Actualizar cantidad máxima según stock
+    function updateMaxQuantity(input) {
+        const productSelect = input.parentElement.querySelector('.product-select');
+        if (productSelect && productSelect.selectedOptions[0]) {
+            const maxStock = parseInt(productSelect.selectedOptions[0].dataset.stock);
+            input.setAttribute('max', maxStock);
+            if (parseInt(input.value) > maxStock) {
+                input.value = maxStock;
+            }
+        }
+    }
 
     // Función para calcular el total
     function calculateTotal() {
         let total = 0;
         document.querySelectorAll('.product-item').forEach(item => {
-            const select = item.querySelector('select[name="product_id[]"]');
-            const quantityInput = item.querySelector('input[name="quantity[]"]');
+            const select = item.querySelector('.product-select');
+            const quantityInput = item.querySelector('.quantity-input');
             
-            if (select && quantityInput) {
+            if (select && select.selectedOptions[0] && quantityInput) {
                 const price = parseFloat(select.selectedOptions[0].dataset.price);
                 const quantity = parseInt(quantityInput.value) || 0;
                 total += price * quantity;
@@ -154,8 +162,92 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('total_amount').textContent = total.toFixed(2);
     }
 
-    // Calcular total inicial
+    // Previsualizar venta
+    document.getElementById('preview_sale').addEventListener('click', function() {
+        const formData = new FormData(document.getElementById('salesForm'));
+        const saleType = formData.get('sale_type');
+        let previewHTML = '';
+        
+        if (saleType === 'mesa') {
+            const tableId = formData.get('table_id');
+            const table = tables.find(t => t.id == tableId);
+            previewHTML += `<p><strong>Mesa:</strong> ${table.number}</p>`;
+        } else {
+            const customerName = formData.get('customer_name') || 'Consumo en barra';
+            previewHTML += `<p><strong>Cliente:</strong> ${customerName}</p>`;
+        }
+        
+        previewHTML += `<h4>Productos:</h4><ul>`;
+        
+        const productIds = formData.getAll('product_id[]');
+        const quantities = formData.getAll('quantity[]');
+        let total = 0;
+        
+        productIds.forEach((productId, index) => {
+            const product = products.find(p => p.id == productId);
+            const quantity = quantities[index];
+            const subtotal = product.price_usd * quantity;
+            total += subtotal;
+            
+            previewHTML += `
+                <li>
+                    ${product.name} - ${quantity} x $${product.price_usd.toFixed(2)} = $${subtotal.toFixed(2)}
+                </li>
+            `;
+        });
+        
+        previewHTML += `</ul>`;
+        previewHTML += `<h4>Total: $${total.toFixed(2)}</h4>`;
+        
+        document.getElementById('preview_content').innerHTML = previewHTML;
+        document.getElementById('salesForm').style.display = 'none';
+        document.getElementById('sale_preview').style.display = 'block';
+    });
+
+    // Cancelar previsualización
+    document.getElementById('cancel_sale').addEventListener('click', function() {
+        document.getElementById('salesForm').style.display = 'block';
+        document.getElementById('sale_preview').style.display = 'none';
+    });
+
+    // Confirmar venta
+    document.getElementById('confirm_sale').addEventListener('click', function() {
+        document.getElementById('salesForm').submit();
+    });
+
+    // Inicializar
+    const tables = JSON.parse('{{ tables|tojson|safe }}');
+    const products = JSON.parse('{{ products|tojson|safe }}');
     calculateTotal();
+    document.querySelectorAll('.quantity-input').forEach(updateMaxQuantity);
 });
 </script>
+
+<style>
+.btn-confirm {
+    background-color: #28a745;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 10px;
+}
+
+.btn-cancel {
+    background-color: #dc3545;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#sale_preview {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+}
+</style>
 {% endblock %}
