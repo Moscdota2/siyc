@@ -8,13 +8,15 @@
     
     <div class="sales-nav">
         <a href="{{ url_for('sales') }}" class="active">Consumo Directo</a>
-        <a href="{{ url_for('view_tables') }}">Mesas</a>
-        <a href="{{ url_for('inventory_history') }}">Reportes</a>
+        <a href="{{ url_for('view_tables') }}">Ordenes de Mesas</a>
+        <a href="{{ url_for('bar_orders') }}" class="nav-link">Ordenes de Barra (Usuarios)</a>
+        <a href="{{ url_for('inventory_history') }}">Historico de Movimientos</a>
         <a href="{{ url_for('sales_reports') }}">Reportes de Venta</a>
+        
     </div>
     
     <div class="sales-content">
-        <form method="POST" class="sales-form" id="salesForm">
+        <form method="POST" action="{{ url_for('register_sale') }}" class="sales-form" id="salesForm">
             <div class="form-group">
                 <label>Tipo de Consumo:</label>
                 <div class="toggle-group">

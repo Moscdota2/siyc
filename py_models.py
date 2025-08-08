@@ -88,6 +88,9 @@ class InventoryMovement(db.Model):
     product = db.relationship('Product', backref='movements')
     user = db.relationship('User', backref='inventory_actions')
 
+    is_locked = db.Column(db.Boolean, default=False)
+    locked_by_admin = db.Column(db.Boolean, default=False)
+
 def create_initial_products():
     products = [
         {

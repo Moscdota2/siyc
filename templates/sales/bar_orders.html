@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block title %}Órdenes de Barra{% endblock %}
+
+{% block content %}
+<h1>Órdenes de Barra Pendientes</h1>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Cliente</th>
+            <th>Total</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for order in orders %}
+        <tr>
+            <td>{{ order.id }}</td>
+            <td>{{ order.customer_name }}</td>
+            <td>${{ "%.2f"|format(order.total_price) }}</td>
+            <td>
+                <a href="{{ url_for('view_bar_order', order_id=order.id) }}" 
+                   class="btn btn-primary">
+                    Ver
+                </a>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="4">No hay órdenes de barra pendientes</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<a href="{{ url_for('sales') }}" class="btn btn-secondary">
+    Volver a Ventas
+</a>
+{% endblock %}

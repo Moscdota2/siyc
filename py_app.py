@@ -345,18 +345,20 @@ def create_table():
 def create_order(table_id):
     table = Table.query.get_or_404(table_id)
     if table.status != "disponible":
-        # En lugar de mostrar warning, redirigir al pedido activo
         active_order = Order.query.filter_by(table_id=table.id, status="pendiente").first()
         if active_order:
             return redirect(url_for('view_order', table_id=table.id))
         else:
-            # Si no hay orden activa pero la mesa está marcada como ocupada, corregir estado
             table.status = "disponible"
             db.session.commit()
             flash('Estado de mesa corregido', 'info')
             return redirect(url_for('view_tables'))
     
-    new_order = Order(table_id=table_id)
+    new_order = Order(
+        table_id=table_id,
+        waiter_id=current_user.id,  # Asignar el usuario actual como mesero
+        status="pendiente"
+    )
     table.status = "ocupada"
     
     try:
@@ -368,6 +370,7 @@ def create_order(table_id):
         db.session.rollback()
         flash(f'Error al crear pedido: {str(e)}', 'danger')
         return redirect(url_for('view_tables'))
+
 
 @app.route('/order/<int:table_id>')
 @login_required
@@ -389,6 +392,8 @@ def view_order(table_id):
                          order_details=order_details, 
                          products=products,
                          table=table)
+
+
 @app.route('/add_product/<int:table_id>', methods=['POST'])
 @login_required
 def add_product(table_id):
@@ -442,7 +447,7 @@ def add_product(table_id):
     
     return redirect(url_for('view_order', table_id=table_id))
 
-@app.route('/close_order/<int:table_id>')
+@app.route('/close_order/<int:table_id>', methods=['POST'])
 @admin_required  # Solo admin puede marcar como pagado
 def close_order(table_id):
     active_order = Order.query.filter_by(table_id=table_id, status="pendiente").first()
@@ -640,7 +645,6 @@ def register_sale():
                     quantity=quantity,
                     exit_type='venta',
                     notes=f'Despachado en orden #{new_order.id} (pendiente de pago)',
-                    is_locked=True
                 )
                 db.session.add(movement)
             
@@ -677,7 +681,8 @@ def view_bar_order(order_id):
                          order=order, 
                          order_details=order_details, 
                          products=products,
-                         is_bar_order=True)  # Añadimos este flag
+                         is_bar_order=True,
+                         table=None)  # Añadimos table=None para evitar errores
 
 
 @app.route('/add_product_to_bar_order/<int:order_id>', methods=['POST'])
@@ -764,6 +769,16 @@ def close_bar_order(order_id):
         db.session.rollback()
         flash(f'Error al cerrar orden: {str(e)}', 'danger')
         return redirect(url_for('view_bar_order', order_id=order_id))
+    
+
+@app.route('/bar_orders')
+@login_required
+def bar_orders():
+    bar_orders = Order.query.filter(
+        Order.status == 'pendiente',
+        Order.table_id == None  # Órdenes sin mesa asignada
+    ).all()
+    return render_template('sales/bar_orders.html', orders=bar_orders)
 
 if __name__ == '__main__':
     with app.app_context():

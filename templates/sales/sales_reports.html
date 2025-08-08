@@ -15,14 +15,28 @@
     <table class="sales-table">
         <tr>
             <th>ID Pedido</th>
-            <th>Mesa</th>
+            <th>Tipo</th>
+            <th>Detalle</th>
             <th>Total</th>
             <th>Fecha</th>
         </tr>
         {% for order in orders %}
         <tr>
             <td>{{ order.id }}</td>
-            <td>Mesa {{ order.table.number }}</td>
+            <td>
+                {% if order.table_id %}
+                    Mesa
+                {% else %}
+                    Barra
+                {% endif %}
+            </td>
+            <td>
+                {% if order.table_id %}
+                    Mesa {{ order.table.number }}
+                {% else %}
+                    {{ order.customer_name }}
+                {% endif %}
+            </td>
             <td>${{ "%.2f"|format(order.total_price) }}</td>
             <td>{{ order.closed_at.strftime('%d/%m/%Y %H:%M') if order.closed_at else 'N/A' }}</td>
         </tr>
