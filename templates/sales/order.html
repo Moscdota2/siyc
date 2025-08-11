@@ -73,7 +73,16 @@
                         </option>
                     {% endfor %}
                 </select>
-                <input type="number" name="quantity" min="1" value="1" class="form-control" required>
+                
+                <select name="exit_type" class="form-control" id="exit_type_selector">
+                    <option value="individual">Unidad</option>
+                    <option value="half_tobo">Medio Tobo (6)</option>
+                    <option value="tobo">Tobo (12)</option>
+                    <option value="half_box">Media Caja (18)</option>
+                    <option value="box">Caja (36)</option>
+                </select>
+                
+                <input type="number" name="quantity" min="1" value="1" class="form-control" id="quantity_input" required>
                 <button type="submit" class="btn btn-primary">Agregar</button>
             </div>
         </form>
@@ -100,4 +109,53 @@
         {% if is_bar_order %}Volver a Ventas{% else %}Volver a Mesas{% endif %}
     </a>
 </div>
+
+
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const exitTypeSelector = document.getElementById('exit_type_selector');
+    const quantityInput = document.getElementById('quantity_input');
+    
+    // Actualizar cantidad según tipo de salida seleccionado
+    exitTypeSelector.addEventListener('change', function() {
+        switch(this.value) {
+            case 'individual':
+                quantityInput.value = 1;
+                quantityInput.min = 1;
+                break;
+            case 'half_tobo':
+                quantityInput.value = 6;
+                quantityInput.min = 6;
+                break;
+            case 'tobo':
+                quantityInput.value = 12;
+                quantityInput.min = 12;
+                break;
+            case 'half_box':
+                quantityInput.value = 18;
+                quantityInput.min = 18;
+                break;
+            case 'box':
+                quantityInput.value = 36;
+                quantityInput.min = 36;
+                break;
+        }
+    });
+    
+    // Si el usuario modifica manualmente la cantidad, determinar el tipo más cercano
+    quantityInput.addEventListener('change', function() {
+        const qty = parseInt(this.value);
+        if (qty % 6 === 0 && qty <= 36) {
+            if (qty === 6) exitTypeSelector.value = 'half_tobo';
+            else if (qty === 12) exitTypeSelector.value = 'tobo';
+            else if (qty === 18) exitTypeSelector.value = 'half_box';
+            else if (qty === 36) exitTypeSelector.value = 'box';
+        } else {
+            exitTypeSelector.value = 'individual';
+        }
+    });
+});
+</script>
 {% endblock %}

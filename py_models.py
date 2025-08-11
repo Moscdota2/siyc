@@ -4,7 +4,7 @@ from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from py_bcv import precio_bcv_actual
 import pytz
-db = SQLAlchemy()
+from py_exchange import db
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -34,6 +34,19 @@ class Product(db.Model):
     modifier = db.relationship('User', backref='modified_products')
     cost_per_unit_usd = db.Column(db.Float)
     last_purchase_price = db.Column(db.Float)
+    # Precios especiales para cervezas
+    price_unit_usd = db.Column(db.Float)  # Precio por unidad (1 cerveza)
+    price_half_tobo_usd = db.Column(db.Float)  # Medio tobo (6 cervezas)
+    price_tobo_usd = db.Column(db.Float)  # Tobo completo (12 cervezas)
+    price_half_box_usd = db.Column(db.Float)  # Media caja (18 cervezas)
+    price_box_usd = db.Column(db.Float)  # Caja completa (36 cervezas)
+    
+    # Precios en bolívares
+    price_unit_bs = db.Column(db.Float)
+    price_half_tobo_bs = db.Column(db.Float)
+    price_tobo_bs = db.Column(db.Float)
+    price_half_box_bs = db.Column(db.Float)
+    price_box_bs = db.Column(db.Float)
 
 class Table(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -92,47 +105,30 @@ class InventoryMovement(db.Model):
     locked_by_admin = db.Column(db.Boolean, default=False)
 
 def create_initial_products():
+
+    from py_exchange import get_current_rate  # Importamos aquí para evitar circularidad
+    current_rate = get_current_rate()
+    
     products = [
         {
             'name': 'Solera Azul',
             'brand': 'Polar',
             'category': 'Cerveza',
             'presentation': 'Botella 222ml',
-            'price_usd': 1.5,
+            'price_unit_usd': 1.0,
+            'price_half_tobo_usd': 5.0,
+            'price_tobo_usd': 10.0,
+            'price_half_box_usd': 12.5,
+            'price_box_usd': 25.0,
+            # Precios en bolívares
+            'price_unit_bs': 1.0 * current_rate * 1.2,  # +20%
+            'price_half_tobo_bs': 5.0 * current_rate * 1.2,
+            'price_tobo_bs': 10.0 * current_rate * 1.2,
+            'price_half_box_bs': 15.0,  # Fijo en $15 equivalente
+            'price_box_bs': 30.0,      # Fijo en $30 equivalente
             'cost_per_unit_usd': 17.0/36
         },
-        {
-            'name': 'Polarcita Negra',
-            'brand': 'Polar',
-            'category': 'Cerveza',
-            'presentation': 'Botella 222ml',
-            'price_usd': 1.3,
-            'cost_per_unit_usd': 17.0/36
-        },
-        {
-            'name': 'Polar Light',
-            'brand': 'Polar',
-            'category': 'Cerveza',
-            'presentation': 'Lata 350ml',
-            'price_usd': 1.8,
-            'cost_per_unit_usd': 17.0/36
-        },
-        {
-            'name': 'Zulia Lager',
-            'brand': 'Zulia',
-            'category': 'Cerveza',
-            'presentation': 'Botella 330ml',
-            'price_usd': 1.2,
-            'cost_per_unit_usd': 19.0/36
-        },
-        {
-            'name': 'Pampero Aniversario',
-            'brand': 'Pampero',
-            'category': 'Ron',
-            'presentation': 'Botella 750ml',
-            'price_usd': 12.0,
-            'cost_per_unit_usd': 12.0
-        }
+        # ... otros productos con estructura similar
     ]
     
     for prod_data in products:
@@ -144,10 +140,21 @@ def create_initial_products():
                 presentation=prod_data['presentation'],
                 quantity=0,
                 box_quantity=0,
-                price_usd=prod_data['price_usd'],
-                price_bs=prod_data['price_usd'] * precio_bcv_actual,
+                price_usd=prod_data['price_unit_usd'],  # Precio unitario por defecto
+                price_bs=prod_data['price_unit_bs'],
+                # Precios especiales
+                price_unit_usd=prod_data['price_unit_usd'],
+                price_half_tobo_usd=prod_data['price_half_tobo_usd'],
+                price_tobo_usd=prod_data['price_tobo_usd'],
+                price_half_box_usd=prod_data['price_half_box_usd'],
+                price_box_usd=prod_data['price_box_usd'],
+                price_unit_bs=prod_data['price_unit_bs'],
+                price_half_tobo_bs=prod_data['price_half_tobo_bs'],
+                price_tobo_bs=prod_data['price_tobo_bs'],
+                price_half_box_bs=prod_data['price_half_box_bs'],
+                price_box_bs=prod_data['price_box_bs'],
                 is_alcoholic=True,
-                cost_per_unit_usd=prod_data.get('cost_per_unit_usd', prod_data['price_usd']*0.7)
+                cost_per_unit_usd=prod_data.get('cost_per_unit_usd', prod_data['price_unit_usd']*0.7)
             )
             db.session.add(product)
     

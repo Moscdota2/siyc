@@ -31,7 +31,7 @@
             <div id="mesa_fields" class="sale-fields">
                 <div class="form-group">
                     <label for="table_id">Mesa:</label>
-                    <select name="table_id" class="form-control" required>
+                    <select name="table_id" class="form-control">
                         {% for table in tables if table.status == 'disponible' %}
                             <option value="{{ table.id }}">Mesa {{ table.number }}</option>
                         {% endfor %}
@@ -46,18 +46,34 @@
                 </div>
             </div>
             
-            <div class="product-selection">
+             <div class="product-selection">
                 <h3>Productos</h3>
                 <div id="product_items">
                     <div class="product-item">
                         <select name="product_id[]" class="form-control product-select" required>
                             <option value="">Seleccione un producto</option>
                             {% for product in products if product.quantity > 0 %}
-                                <option value="{{ product.id }}" data-price="{{ product.price_usd }}" data-stock="{{ product.quantity }}">
+                                <option value="{{ product.id }}" 
+                                        data-price="{{ product.price_usd }}"
+                                        data-price-unit="{{ product.price_unit_usd }}"
+                                        data-price-half-tobo="{{ product.price_half_tobo_usd }}"
+                                        data-price-tobo="{{ product.price_tobo_usd }}"
+                                        data-price-half-box="{{ product.price_half_box_usd }}"
+                                        data-price-box="{{ product.price_box_usd }}"
+                                        data-stock="{{ product.quantity }}">
                                     {{ product.name }} (${{ "%.2f"|format(product.price_usd) }}) - Stock: {{ product.quantity }}
                                 </option>
                             {% endfor %}
                         </select>
+                        
+                        <select name="exit_type[]" class="form-control exit-type-select">
+                            <option value="individual">Unidad</option>
+                            <option value="half_tobo">Medio Tobo (6)</option>
+                            <option value="tobo">Tobo (12)</option>
+                            <option value="half_box">Media Caja (18)</option>
+                            <option value="box">Caja (36)</option>
+                        </select>
+                        
                         <input type="number" name="quantity[]" min="1" value="1" class="form-control quantity-input" required>
                         <button type="button" class="btn-remove">×</button>
                     </div>
@@ -84,7 +100,7 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Mostrar/ocultar campos según tipo de consumo
+     // Mostrar/ocultar campos según tipo de consumo
     document.querySelectorAll('input[name="sale_type"]').forEach(radio => {
         radio.addEventListener('change', function() {
             document.querySelectorAll('.sale-fields').forEach(field => {
@@ -99,25 +115,95 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Agregar más productos
+    // Agregar más productos con el nuevo selector
     document.getElementById('add_product').addEventListener('click', function() {
         const newItem = document.createElement('div');
-            newItem.className = 'product-item';
-            newItem.innerHTML = `
-                <select name="product_id[]" class="form-control product-select" required>
-                    <option value="">Seleccione un producto</option>
-                    ${products.map(p => `
-                        <option value="${p.id}" data-price="${p.price_usd}" data-stock="${p.quantity}">
-                            ${p.name} ($${p.price_usd.toFixed(2)}) - Stock: ${p.quantity}
-                        </option>
-                    `).join('')}
-                </select>
-                <input type="number" name="quantity[]" min="1" value="1" class="form-control quantity-input" required>
-                <button type="button" class="btn-remove">×</button>
-            `;
-            document.getElementById('product_items').appendChild(newItem);
+        newItem.className = 'product-item';
+        newItem.innerHTML = `
+            <select name="product_id[]" class="form-control product-select" required>
+                <option value="">Seleccione un producto</option>
+                ${products.map(p => `
+                    <option value="${p.id}" 
+                            data-price="${p.price_usd}"
+                            data-price-unit="${p.price_unit_usd}"
+                            data-price-half-tobo="${p.price_half_tobo_usd}"
+                            data-price-tobo="${p.price_tobo_usd}"
+                            data-price-half-box="${p.price_half_box_usd}"
+                            data-price-box="${p.price_box_usd}"
+                            data-stock="${p.quantity}">
+                        ${p.name} ($${p.price_usd.toFixed(2)}) - Stock: ${p.quantity}
+                    </option>
+                `).join('')}
+            </select>
+            <select name="exit_type[]" class="form-control exit-type-select">
+                <option value="individual">Unidad</option>
+                <option value="half_tobo">Medio Tobo (6)</option>
+                <option value="tobo">Tobo (12)</option>
+                <option value="half_box">Media Caja (18)</option>
+                <option value="box">Caja (36)</option>
+            </select>
+            <input type="number" name="quantity[]" min="1" value="1" class="form-control quantity-input" required>
+            <button type="button" class="btn-remove">×</button>
+        `;
+        document.getElementById('product_items').appendChild(newItem);
+        
+        // Agregar event listeners al nuevo elemento
+        addProductEventListeners(newItem);
+        calculateTotal();
+    });
+
+    // Función para agregar event listeners a un producto
+    function addProductEventListeners(productItem) {
+        const exitTypeSelect = productItem.querySelector('.exit-type-select');
+        const quantityInput = productItem.querySelector('.quantity-input');
+        const productSelect = productItem.querySelector('.product-select');
+        
+        // Cambiar cantidad según tipo seleccionado
+        exitTypeSelect.addEventListener('change', function() {
+            switch(this.value) {
+                case 'individual':
+                    quantityInput.value = 1;
+                    quantityInput.min = 1;
+                    break;
+                case 'half_tobo':
+                    quantityInput.value = 6;
+                    quantityInput.min = 6;
+                    break;
+                case 'tobo':
+                    quantityInput.value = 12;
+                    quantityInput.min = 12;
+                    break;
+                case 'half_box':
+                    quantityInput.value = 18;
+                    quantityInput.min = 18;
+                    break;
+                case 'box':
+                    quantityInput.value = 36;
+                    quantityInput.min = 36;
+                    break;
+            }
             calculateTotal();
         });
+        
+        // Cambiar tipo si se modifica manualmente la cantidad
+        quantityInput.addEventListener('change', function() {
+            const qty = parseInt(this.value);
+            if (qty % 6 === 0 && qty <= 36) {
+                if (qty === 6) exitTypeSelect.value = 'half_tobo';
+                else if (qty === 12) exitTypeSelect.value = 'tobo';
+                else if (qty === 18) exitTypeSelect.value = 'half_box';
+                else if (qty === 36) exitTypeSelect.value = 'box';
+            } else {
+                exitTypeSelect.value = 'individual';
+            }
+            calculateTotal();
+        });
+        
+        // Actualizar precios cuando cambia el producto
+        productSelect.addEventListener('change', function() {
+            calculateTotal();
+        });
+    }
 
     // Eliminar producto
     document.addEventListener('click', function(e) {
@@ -127,13 +213,57 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Calcular total cuando cambian cantidades o productos
-    document.addEventListener('input', function(e) {
-        if (e.target.classList.contains('quantity-input') || e.target.classList.contains('product-select')) {
-            updateMaxQuantity(e.target);
-            calculateTotal();
-        }
-    });
+    // Función para calcular el total considerando los tipos de venta
+    function calculateTotal() {
+        let total = 0;
+        document.querySelectorAll('.product-item').forEach(item => {
+            const select = item.querySelector('.product-select');
+            const exitTypeSelect = item.querySelector('.exit-type-select');
+            const quantityInput = item.querySelector('.quantity-input');
+            
+            if (select && select.selectedOptions[0] && quantityInput && exitTypeSelect) {
+                const exitType = exitTypeSelect.value;
+                const quantity = parseInt(quantityInput.value) || 0;
+                const productData = select.selectedOptions[0].dataset;
+                
+                let subtotal = 0;
+                
+                if (exitType === 'individual') {
+                    // Calcular agrupamientos automáticos
+                    const tobos = Math.floor(quantity / 12);
+                    const remaining = quantity % 12;
+                    const halfTobos = Math.floor(remaining / 6);
+                    const units = remaining % 6;
+                    
+                    subtotal = (tobos * parseFloat(productData.priceTobo)) + 
+                               (halfTobos * parseFloat(productData.priceHalfTobo)) + 
+                               (units * parseFloat(productData.priceUnit));
+                } else {
+                    // Usar precio según tipo seleccionado
+                    switch(exitType) {
+                        case 'half_tobo':
+                            subtotal = parseFloat(productData.priceHalfTobo);
+                            break;
+                        case 'tobo':
+                            subtotal = parseFloat(productData.priceTobo);
+                            break;
+                        case 'half_box':
+                            subtotal = parseFloat(productData.priceHalfBox);
+                            break;
+                        case 'box':
+                            subtotal = parseFloat(productData.priceBox);
+                            break;
+                        default:
+                            subtotal = quantity * parseFloat(productData.priceUnit);
+                    }
+                }
+                
+                total += subtotal;
+            }
+        });
+        
+        document.getElementById('total_amount').textContent = total.toFixed(2);
+    }
 
     // Actualizar cantidad máxima según stock
     function updateMaxQuantity(input) {
@@ -217,6 +347,9 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('salesForm').submit();
     });
 
+    // Inicializar event listeners para el primer producto
+    document.querySelectorAll('.product-item').forEach(addProductEventListeners);
+    
     // Inicializar
     const tables = JSON.parse('{{ tables|tojson|safe }}');
     const products = JSON.parse('{{ products|tojson|safe }}');
@@ -226,6 +359,45 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <style>
+    /* Estilos para el nuevo selector */
+.product-item {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: center;
+}
+
+.product-item select, 
+.product-item input {
+    flex: 1;
+}
+
+.exit-type-select {
+    max-width: 150px;
+}
+
+.quantity-input {
+    max-width: 80px;
+}
+
+.btn-remove {
+    background: #dc3545;
+    color: white;
+    border: none;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.btn-add {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+}
 .btn-confirm {
     background-color: #28a745;
     color: white;

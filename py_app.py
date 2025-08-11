@@ -1,8 +1,10 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, abort
 from flask_login import LoginManager, login_user, login_required, current_user, logout_user
 from functools import wraps
-from py_models import db, User, Product, Table, Order, OrderDetail, InventoryMovement, create_initial_products
+from py_exchange import db  # Importamos db desde py_exchange
+from py_models import User, Product, Table, Order, OrderDetail, InventoryMovement, create_initial_products
 from py_bcv import precio_bcv_actual
+from py_exchange import get_current_rate, update_rate
 from datetime import datetime
 
 app = Flask(__name__)
@@ -85,6 +87,20 @@ def inventory():
     products = Product.query.all()
     low_stock = Product.query.filter(Product.quantity < 10).count()
     return render_template('inventory/inventory.html', products=products, low_stock=low_stock)
+
+
+# Rutas para manejar la tasa de cambio
+@app.route('/exchange_rate', methods=['GET', 'POST'])
+@admin_required
+def manage_exchange_rate():
+    if request.method == 'POST':
+        new_rate = float(request.form['rate'])
+        update_rate(new_rate)
+        flash(f'Tasa de cambio actualizada a {new_rate} Bs/USD', 'success')
+        return redirect(url_for('manage_exchange_rate'))
+    
+    current_rate = get_current_rate()
+    return render_template('exchange_rate.html', current_rate=current_rate)
 
 # Gestión de productos
 @app.route('/create_product', methods=['GET', 'POST'])
@@ -404,25 +420,54 @@ def add_product(table_id):
         return redirect(url_for('view_tables'))
     
     product = Product.query.get_or_404(request.form['product_id'])
+    exit_type = request.form.get('exit_type', 'individual')
     quantity = int(request.form['quantity'])
+    
+    # Calcular subtotal según la lógica de agrupamiento
+    if exit_type == 'individual':
+        # Calcular cuántos tobos completos y medios hay
+        tobos = quantity // 12
+        remaining = quantity % 12
+        half_tobos = remaining // 6
+        
+        subtotal = (tobos * product.price_tobo_usd) + (half_tobos * product.price_half_tobo_usd)
+        
+        # Si queda algo que no es medio tobo, cobrar como unidades
+        remaining_units = remaining % 6
+        if remaining_units > 0:
+            subtotal += remaining_units * product.price_unit_usd
+    elif exit_type == 'half_tobo':
+        subtotal = product.price_half_tobo_usd
+        quantity = 6
+    elif exit_type == 'tobo':
+        subtotal = product.price_tobo_usd
+        quantity = 12
+    elif exit_type == 'half_box':
+        subtotal = product.price_half_box_usd
+        quantity = 18
+    elif exit_type == 'box':
+        subtotal = product.price_box_usd
+        quantity = 36
+    else:
+        flash('Tipo de venta no válido', 'danger')
+        return redirect(url_for('view_order', table_id=table_id))
     
     if product.quantity < quantity:
         flash(f'Stock insuficiente de {product.name}', 'danger')
         return redirect(url_for('view_order', table_id=table_id))
     
-    subtotal = product.price_usd * quantity
     order_detail = OrderDetail(
         order_id=active_order.id,
         product_id=product.id,
         quantity=quantity,
         subtotal=subtotal,
-        exit_type='individual'
+        exit_type=exit_type
     )
     
     # Actualizar total de la orden
     active_order.total_price += subtotal
     
-    # Descontar del inventario INMEDIATAMENTE
+    # Descontar del inventario
     product.quantity -= quantity
     
     # Registrar movimiento de inventario
@@ -431,9 +476,9 @@ def add_product(table_id):
         user_id=current_user.id,
         movement_type='salida',
         quantity=quantity,
-        exit_type='venta',
+        exit_type=exit_type if exit_type != 'individual' else 'venta',
         notes=f'Despachado en orden #{active_order.id} (pendiente de pago)',
-        is_locked=True  # Bloquear para que no se pueda modificar
+        is_locked=True
     )
     
     try:
@@ -446,6 +491,12 @@ def add_product(table_id):
         flash(f'Error al agregar producto: {str(e)}', 'danger')
     
     return redirect(url_for('view_order', table_id=table_id))
+
+
+
+
+
+
 
 @app.route('/close_order/<int:table_id>', methods=['POST'])
 @admin_required  # Solo admin puede marcar como pagado
@@ -583,6 +634,7 @@ def register_sale():
             sale_type = request.form['sale_type']
             product_ids = request.form.getlist('product_id[]')
             quantities = request.form.getlist('quantity[]')
+            exit_types = request.form.getlist('exit_type[]')
             
             # Crear nueva orden
             if sale_type == 'mesa':
@@ -613,7 +665,7 @@ def register_sale():
             
             # Procesar productos
             total = 0
-            for product_id, quantity in zip(product_ids, quantities):
+            for product_id, quantity, exit_type in zip(product_ids, quantities, exit_types):
                 product = Product.query.get_or_404(product_id)
                 quantity = int(quantity)
                 
@@ -622,7 +674,32 @@ def register_sale():
                     db.session.rollback()
                     return redirect(url_for('sales'))
                 
-                subtotal = product.price_usd * quantity
+                # Calcular subtotal según tipo de salida
+                if exit_type == 'individual':
+                    # Calcular agrupamientos automáticos
+                    tobos = quantity // 12
+                    remaining = quantity % 12
+                    half_tobos = remaining // 6
+                    units = remaining % 6
+                    
+                    subtotal = (tobos * product.price_tobo_usd) + \
+                               (half_tobos * product.price_half_tobo_usd) + \
+                               (units * product.price_unit_usd)
+                elif exit_type == 'half_tobo':
+                    subtotal = product.price_half_tobo_usd
+                    quantity = 6
+                elif exit_type == 'tobo':
+                    subtotal = product.price_tobo_usd
+                    quantity = 12
+                elif exit_type == 'half_box':
+                    subtotal = product.price_half_box_usd
+                    quantity = 18
+                elif exit_type == 'box':
+                    subtotal = product.price_box_usd
+                    quantity = 36
+                else:
+                    subtotal = product.price_usd * quantity
+                
                 total += subtotal
                 
                 order_detail = OrderDetail(
@@ -630,7 +707,7 @@ def register_sale():
                     product_id=product.id,
                     quantity=quantity,
                     subtotal=subtotal,
-                    exit_type='individual'
+                    exit_type=exit_type
                 )
                 
                 # Actualizar inventario
@@ -643,7 +720,7 @@ def register_sale():
                     user_id=current_user.id,
                     movement_type='salida',
                     quantity=quantity,
-                    exit_type='venta',
+                    exit_type=exit_type if exit_type != 'individual' else 'venta',
                     notes=f'Despachado en orden #{new_order.id} (pendiente de pago)',
                 )
                 db.session.add(movement)
@@ -654,7 +731,7 @@ def register_sale():
             db.session.commit()
             flash('Orden creada exitosamente', 'success')
             
-            # Redirigir a la vista de la orden recién creada
+            # Redirigir según tipo de orden
             if sale_type == 'mesa':
                 return redirect(url_for('view_order', table_id=table_id))
             else:
@@ -695,34 +772,57 @@ def add_product_to_bar_order(order_id):
         return redirect(url_for('view_bar_order', order_id=order_id))
     
     product = Product.query.get_or_404(request.form['product_id'])
+    exit_type = request.form.get('exit_type', 'individual')
     quantity = int(request.form['quantity'])
+    
+    # La misma lógica de cálculo que para las mesas
+    if exit_type == 'individual':
+        tobos = quantity // 12
+        remaining = quantity % 12
+        half_tobos = remaining // 6
+        
+        subtotal = (tobos * product.price_tobo_usd) + (half_tobos * product.price_half_tobo_usd)
+        
+        remaining_units = remaining % 6
+        if remaining_units > 0:
+            subtotal += remaining_units * product.price_unit_usd
+    elif exit_type == 'half_tobo':
+        subtotal = product.price_half_tobo_usd
+        quantity = 6
+    elif exit_type == 'tobo':
+        subtotal = product.price_tobo_usd
+        quantity = 12
+    elif exit_type == 'half_box':
+        subtotal = product.price_half_box_usd
+        quantity = 18
+    elif exit_type == 'box':
+        subtotal = product.price_box_usd
+        quantity = 36
+    else:
+        flash('Tipo de venta no válido', 'danger')
+        return redirect(url_for('view_bar_order', order_id=order_id))
     
     if product.quantity < quantity:
         flash(f'Stock insuficiente de {product.name}', 'danger')
         return redirect(url_for('view_bar_order', order_id=order_id))
     
-    subtotal = product.price_usd * quantity
     order_detail = OrderDetail(
         order_id=order.id,
         product_id=product.id,
         quantity=quantity,
         subtotal=subtotal,
-        exit_type='individual'
+        exit_type=exit_type
     )
     
-    # Actualizar total de la orden
     order.total_price += subtotal
-    
-    # Descontar del inventario
     product.quantity -= quantity
     
-    # Registrar movimiento de inventario
     movement = InventoryMovement(
         product_id=product.id,
         user_id=current_user.id,
         movement_type='salida',
         quantity=quantity,
-        exit_type='venta',
+        exit_type=exit_type if exit_type != 'individual' else 'venta',
         notes=f'Despachado en orden #{order.id} (pendiente de pago)',
         is_locked=True
     )
