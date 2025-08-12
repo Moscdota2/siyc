@@ -1,0 +1,91 @@
+<div class="payment-modal">
+    <div class="modal-header">
+        <h5 class="modal-title">Registrar Pago</h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+    </div>
+    <div class="modal-body">
+        <form method="POST" id="paymentForm", action="{% if is_bar_order %}{{ url_for('close_bar_order', order_id=order.id) }}{% else %}{{ url_for('close_order', table_id=table.id) }}{% endif %}">
+            <input type="hidden" name="order_id" value="{{ order.id }}">
+            
+            <div class="form-group">
+                <label>Moneda de Pago:</label>
+                <select name="payment_currency" class="form-control" id="paymentCurrency" required>
+                    <option value="usd">Dólares (USD)</option>
+                    <option value="bs">Bolívares (BS)</option>
+                </select>
+            </div>
+
+            <div id="usdPaymentSection">
+                <div class="form-group">
+                    <label>Método de Pago USD:</label>
+                    <select name="payment_method" class="form-control" id="usdPaymentMethod" required>
+                        {% for method in payment_methods if method.currency == 'usd' %}
+                        <option value="{{ method.id }}">{{ method.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Monto USD:</label>
+                    <input type="number" step="0.01" name="payment_amount" 
+                           value="{{ "%.2f"|format(order.total_price) }}" 
+                           class="form-control" id="usdAmount" required>
+                </div>
+            </div>
+
+            <div id="bsPaymentSection" style="display:none;">
+                <div class="form-group">
+                    <label>Método de Pago BS:</label>
+                    <select name="payment_method" class="form-control" id="bsPaymentMethod">
+                        {% for method in payment_methods if method.currency == 'bs' %}
+                        <option value="{{ method.id }}">{{ method.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Monto BS:</label>
+                    <input type="number" step="0.01" name="payment_amount" 
+                           value="{{ "%.2f"|format(order.total_price * current_rate) }}" 
+                           class="form-control" id="bsAmount">
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Confirmar Pago</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const currencySelect = document.getElementById('paymentCurrency');
+    const usdSection = document.getElementById('usdPaymentSection');
+    const bsSection = document.getElementById('bsPaymentSection');
+    const usdMethod = document.getElementById('usdPaymentMethod');
+    const bsMethod = document.getElementById('bsPaymentMethod');
+    const usdAmount = document.getElementById('usdAmount');
+    const bsAmount = document.getElementById('bsAmount');
+
+    function updatePaymentSections() {
+        if (currencySelect.value === 'usd') {
+            usdSection.style.display = 'block';
+            bsSection.style.display = 'none';
+            usdMethod.required = true;
+            bsMethod.required = false;
+            usdAmount.required = true;
+            bsAmount.required = false;
+        } else {
+            usdSection.style.display = 'none';
+            bsSection.style.display = 'block';
+            usdMethod.required = false;
+            bsMethod.required = true;
+            usdAmount.required = false;
+            bsAmount.required = true;
+        }
+    }
+
+    currencySelect.addEventListener('change', updatePaymentSections);
+    updatePaymentSections();
+});
+</script>

@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, abo
 from flask_login import LoginManager, login_user, login_required, current_user, logout_user
 from functools import wraps
 from py_exchange import db  # Importamos db desde py_exchange
-from py_models import User, Product, Table, Order, OrderDetail, InventoryMovement, create_initial_products
+from py_models import User, Product, Table, Order, OrderDetail, InventoryMovement, create_initial_products, PaymentMethod
 from py_bcv import precio_bcv_actual
 from py_exchange import get_current_rate, update_rate
 from datetime import datetime
@@ -100,7 +100,7 @@ def manage_exchange_rate():
         return redirect(url_for('manage_exchange_rate'))
     
     current_rate = get_current_rate()
-    return render_template('exchange_rate.html', current_rate=current_rate)
+    return render_template('sales/exchange_rate.html', current_rate=current_rate)
 
 # Gestión de productos
 @app.route('/create_product', methods=['GET', 'POST'])
@@ -195,7 +195,7 @@ def inventory_entry():
         product_type = request.form.get('product_type', '')
         currency = request.form['currency']  # 'usd' o 'bs'
         purchase_price = float(request.form['purchase_price'])
-        distributor = request.form['distributor']  # 'polar' o 'regional'
+        distributor = request.form.get('distributor', '')  # Solo para cerveza y ron
         
         product = Product.query.get_or_404(product_id)
         
@@ -204,44 +204,56 @@ def inventory_entry():
             units_per_box = 36
         elif product_type == 'ron':
             units_per_box = 6
-        else:
+        else:  # Anís, whisky y otros
             units_per_box = 1
         
         units = int(boxes * units_per_box)
         
         # Calcular precio en dólares según moneda de pago y distribuidor
         if currency == 'bs':
-            if distributor == 'polar':
-                # Polar en BS: $20.80 por caja
-                usd_price_per_box = 20.80
-            else:
-                # Regional en BS: $19.50 por caja
-                usd_price_per_box = 19.50
-        else:
-            if distributor == 'polar':
-                # Polar en USD: $17 por caja
-                usd_price_per_box = 17.00
-            else:
-                # Regional en USD: $19 por caja
-                usd_price_per_box = 19.00
+            if product_type == 'cerveza':
+                if distributor == 'polar':
+                    usd_price_per_box = 20.80
+                else:  # regional
+                    usd_price_per_box = 19.50
+            elif product_type == 'ron':
+                usd_price_per_box = 15.00  # Precio fijo por caja de ron en BS
+            else:  # Anís, whisky
+                usd_price_per_box = purchase_price / precio_bcv_actual
+        else:  # USD
+            if product_type == 'cerveza':
+                if distributor == 'polar':
+                    usd_price_per_box = 17.00
+                else:  # regional
+                    usd_price_per_box = 19.00
+            elif product_type == 'ron':
+                usd_price_per_box = 15.00  # Precio fijo por caja de ron en USD
+            else:  # Anís, whisky
+                usd_price_per_box = purchase_price
         
         total_usd_investment = boxes * usd_price_per_box
         
         # Actualizar inventario
         product.quantity += units
-        product.box_quantity += boxes
+        if product_type in ['cerveza', 'ron']:
+            product.box_quantity += boxes
         
-        # Registrar movimiento con detalles financieros
+       # Registrar movimiento con detalles financieros
         movement = InventoryMovement(
             product_id=product.id,
             user_id=current_user.id,
             movement_type='entrada',
             quantity=units,
+            boxes=boxes,
+            units_per_box=units_per_box,
             currency=currency,
             purchase_price=purchase_price,
-            distributor=distributor,
-            notes=f"Entrada de {boxes} cajas de {product.name} ({units} unidades) | {distributor} | {currency.upper()}"
+            distributor=distributor if product_type in ['cerveza', 'ron'] else 'sistema',
+            notes=f"Entrada de {boxes} {'cajas' if product_type in ['cerveza', 'ron'] else 'botellas'} de {product.name} ({units} unidades)"
         )
+        
+        # Asignar el valor después de crear el objeto
+        movement.total_usd_investment = total_usd_investment
         
         try:
             db.session.add(movement)
@@ -256,10 +268,12 @@ def inventory_entry():
     # Obtener productos agrupados
     beers = Product.query.filter_by(category='Cerveza').all()
     rums = Product.query.filter_by(category='Ron').all()
+    anises = Product.query.filter_by(category='Anís').all()
+    whiskies = Product.query.filter_by(category='Whisky').all()
     
     return render_template(
         "inventory/inventory_entry.html",
-        products=beers + rums,
+        products=beers + rums + anises + whiskies,
         precio_bcv=precio_bcv_actual
     )
 
@@ -284,18 +298,31 @@ def inventory_exit():
         exit_type = request.form['exit_type']
         product = Product.query.get_or_404(product_id)
         
-        # Calcular cantidad según tipo de salida
-        if exit_type == 'individual':
-            quantity = 1
-        elif exit_type == 'tobo':
-            quantity = 12
-        elif exit_type == 'media_caja':
-            quantity = 18
-        elif exit_type == 'caja':
-            quantity = 36
-        else:
-            flash('Tipo de salida inválido', 'danger')
-            return redirect(url_for('inventory_exit'))
+        # Calcular cantidad según tipo de salida y categoría
+        if product.category == 'Cerveza':
+            if exit_type == 'individual':
+                quantity = 1
+            elif exit_type == 'tobo':
+                quantity = 12
+            elif exit_type == 'media_caja':
+                quantity = 18
+            elif exit_type == 'caja':
+                quantity = 36
+            else:
+                flash('Tipo de salida inválido', 'danger')
+                return redirect(url_for('inventory_exit'))
+        elif product.category == 'Ron':
+            if exit_type == 'individual':
+                quantity = 1
+            elif exit_type == 'media_caja':
+                quantity = 3  # Media caja de ron (6/2)
+            elif exit_type == 'caja':
+                quantity = 6  # Caja completa de ron
+            else:
+                flash('Tipo de salida inválido', 'danger')
+                return redirect(url_for('inventory_exit'))
+        else:  # Anís, Whisky y otros
+            quantity = 1  # Siempre se vende por botella
         
         # Verificar stock
         if product.quantity < quantity:
@@ -387,13 +414,10 @@ def create_order(table_id):
         flash(f'Error al crear pedido: {str(e)}', 'danger')
         return redirect(url_for('view_tables'))
 
-
 @app.route('/order/<int:table_id>')
 @login_required
 def view_order(table_id):
     table = Table.query.get_or_404(table_id)
-    
-    # Buscar la orden activa (no pagada) para esta mesa
     active_order = Order.query.filter_by(table_id=table.id, status="pendiente").first()
     
     if not active_order:
@@ -402,12 +426,15 @@ def view_order(table_id):
     
     order_details = OrderDetail.query.filter_by(order_id=active_order.id).all()
     products = Product.query.filter(Product.quantity > 0).all()
+    payment_methods = PaymentMethod.query.filter_by(is_active=True).order_by(PaymentMethod.currency, PaymentMethod.name).all()
     
     return render_template('sales/order.html', 
                          order=active_order, 
                          order_details=order_details, 
                          products=products,
-                         table=table)
+                         table=table,
+                         payment_methods=payment_methods,
+                         current_rate=get_current_rate())  # Añade esto
 
 
 @app.route('/add_product/<int:table_id>', methods=['POST'])
@@ -499,21 +526,48 @@ def add_product(table_id):
 
 
 @app.route('/close_order/<int:table_id>', methods=['POST'])
-@admin_required  # Solo admin puede marcar como pagado
+@admin_required
 def close_order(table_id):
     active_order = Order.query.filter_by(table_id=table_id, status="pendiente").first()
     if not active_order:
         flash('No hay pedido activo para esta mesa', 'danger')
         return redirect(url_for('view_tables'))
     
-    table = active_order.table
+    # Obtener datos del formulario de pago
+    payment_currency = request.form['payment_currency']
+    payment_method_id = int(request.form['payment_method'])
+    payment_amount = float(request.form['payment_amount'])
+    current_rate = get_current_rate()
     
-    # Cambiar estado a "pagado"
+    # Calcular montos en ambas monedas
+    if payment_currency == 'bs':
+        payment_amount_bs = payment_amount
+        payment_amount_usd = payment_amount / current_rate
+    else:  # USD
+        payment_amount_usd = payment_amount
+        payment_amount_bs = payment_amount * current_rate
+    
+    # Validar que el pago cubra el total
+    if payment_currency == 'bs' and payment_amount_bs < active_order.total_price * current_rate:
+        flash('El monto pagado no cubre el total de la orden', 'danger')
+        return redirect(url_for('view_order', table_id=table_id))
+    
+    if payment_currency == 'usd' and payment_amount_usd < active_order.total_price:
+        flash('El monto pagado no cubre el total de la orden', 'danger')
+        return redirect(url_for('view_order', table_id=table_id))
+    
+    # Actualizar la orden con los datos del pago
+    table = active_order.table
     active_order.status = "pagado"
     active_order.closed_at = datetime.utcnow()
+    active_order.payment_currency = payment_currency
+    active_order.exchange_rate = current_rate
+    active_order.payment_amount_bs = payment_amount_bs
+    active_order.payment_amount_usd = payment_amount_usd
+    active_order.payment_method_id = payment_method_id
     table.status = "disponible"
     
-    # Actualizar los movimientos de inventario para marcarlos como pagados
+    # Registrar cambio en los movimientos de inventario
     movements = InventoryMovement.query.filter(
         InventoryMovement.notes.like(f'%orden #{active_order.id}%')
     ).all()
@@ -523,7 +577,15 @@ def close_order(table_id):
     
     try:
         db.session.commit()
-        flash(f'Pedido #{active_order.id} marcado como PAGADO. Mesa {table.number} liberada', 'success')
+        
+        # Preparar mensaje de confirmación con detalles del pago
+        payment_method = PaymentMethod.query.get(payment_method_id)
+        if payment_currency == 'bs':
+            payment_msg = f"Pago registrado: {payment_amount_bs:.2f} Bs (${payment_amount_usd:.2f}) - {payment_method.name}"
+        else:
+            payment_msg = f"Pago registrado: ${payment_amount_usd:.2f} ({payment_amount_bs:.2f} Bs) - {payment_method.name}"
+        
+        flash(f'Pedido #{active_order.id} marcado como PAGADO. {payment_msg}. Mesa {table.number} liberada', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error al cerrar pedido: {str(e)}', 'danger')
@@ -621,9 +683,16 @@ def sales_reports():
     # Calcular total de ventas
     total_sales = sum(order.total_price for order in completed_orders)
     
+     # Calcular totales por moneda
+    total_usd = sum(o.payment_amount_usd for o in completed_orders if o.payment_currency == 'usd')
+    total_bs = sum(o.payment_amount_bs for o in completed_orders if o.payment_currency == 'bs')
+    
     return render_template('sales/sales_reports.html', 
                          orders=completed_orders,
-                         total_sales=total_sales)
+                         total_sales=total_sales,
+                         total_usd=total_usd,
+                         total_bs=total_bs,
+                         current_rate=get_current_rate())
 
 @app.route('/register_sale', methods=['POST'])
 @login_required
@@ -742,6 +811,7 @@ def register_sale():
             flash(f'Error al registrar orden: {str(e)}', 'danger')
             return redirect(url_for('sales'))
 
+
 @app.route('/bar_order/<int:order_id>')
 @login_required
 def view_bar_order(order_id):
@@ -753,13 +823,16 @@ def view_bar_order(order_id):
     
     order_details = OrderDetail.query.filter_by(order_id=order.id).all()
     products = Product.query.filter(Product.quantity > 0).all()
+    payment_methods = PaymentMethod.query.filter_by(is_active=True).order_by(PaymentMethod.currency, PaymentMethod.name).all()
     
     return render_template('sales/order.html', 
+                        payment_methods=payment_methods,
                          order=order, 
                          order_details=order_details, 
                          products=products,
                          is_bar_order=True,
-                         table=None)  # Añadimos table=None para evitar errores
+                         table=None,
+                         current_rate=get_current_rate())  # Añade esto
 
 
 @app.route('/add_product_to_bar_order/<int:order_id>', methods=['POST'])
@@ -848,26 +921,60 @@ def close_bar_order(order_id):
         flash('Esta orden ya ha sido pagada', 'warning')
         return redirect(url_for('view_bar_order', order_id=order_id))
     
-    # Cambiar estado a "pagado"
-    order.status = "pagado"
-    order.closed_at = datetime.utcnow()
-    order.payment_method = request.form['payment_method']
-    
-    # Actualizar los movimientos de inventario para marcarlos como pagados
-    movements = InventoryMovement.query.filter(
-        InventoryMovement.notes.like(f'%orden #{order.id}%')
-    ).all()
-    
-    for mov in movements:
-        mov.notes = mov.notes.replace('(pendiente de pago)', '(pagado)')
-    
+    # Obtener datos del formulario
     try:
+        payment_currency = request.form['payment_currency']
+        payment_method_id = int(request.form['payment_method'])
+        payment_amount = float(request.form['payment_amount'])
+        current_rate = get_current_rate()
+        
+        # Calcular montos
+        if payment_currency == 'bs':
+            payment_amount_bs = payment_amount
+            payment_amount_usd = payment_amount / current_rate
+        else:  # USD
+            payment_amount_usd = payment_amount
+            payment_amount_bs = payment_amount * current_rate
+        
+        # Validar pago
+        if payment_currency == 'bs' and payment_amount_bs < order.total_price * current_rate:
+            flash('El monto pagado no cubre el total', 'danger')
+            return redirect(url_for('view_bar_order', order_id=order_id))
+        
+        if payment_currency == 'usd' and payment_amount_usd < order.total_price:
+            flash('El monto pagado no cubre el total', 'danger')
+            return redirect(url_for('view_bar_order', order_id=order_id))
+        
+        # Actualizar orden
+        order.status = "pagado"
+        order.closed_at = datetime.now
+        order.payment_currency = payment_currency
+        order.exchange_rate = current_rate
+        order.payment_amount_bs = payment_amount_bs
+        order.payment_amount_usd = payment_amount_usd
+        order.payment_method_id = payment_method_id
+        
+        # Actualizar movimientos de inventario
+        movements = InventoryMovement.query.filter(
+            InventoryMovement.notes.like(f'%orden #{order.id}%')
+        ).all()
+        
+        for mov in movements:
+            mov.notes = mov.notes.replace('(pendiente de pago)', '(pagado)')
+        
         db.session.commit()
-        flash(f'Orden #{order.id} marcada como PAGADA', 'success')
+        
+        payment_method = PaymentMethod.query.get(payment_method_id)
+        flash(f'Orden #{order.id} pagada con {payment_method.name} - ${payment_amount_usd:.2f} / {payment_amount_bs:.2f} Bs', 'success')
         return redirect(url_for('sales_reports'))
+        
+    except KeyError as e:
+        db.session.rollback()
+        flash(f'Faltan datos en el formulario: {str(e)}', 'danger')
+        return redirect(url_for('view_bar_order', order_id=order_id))
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al cerrar orden: {str(e)}', 'danger')
+        flash(f'Error al procesar pago: {str(e)}', 'danger')
         return redirect(url_for('view_bar_order', order_id=order_id))
     
 
@@ -887,6 +994,17 @@ if __name__ == '__main__':
         
         # Crear todas las tablas con los nuevos esquemas
         db.create_all()
+
+        # Crear métodos de pago iniciales si no existen
+        if not PaymentMethod.query.first():
+            payment_methods = [
+                PaymentMethod(name='Efectivo USD', currency='usd'),
+                PaymentMethod(name='Efectivo BS', currency='bs'),
+                PaymentMethod(name='Pago Móvil', currency='bs'),
+                PaymentMethod(name='Punto de Venta', currency='bs'),
+                PaymentMethod(name='Transferencia', currency='bs')
+            ]
+            db.session.add_all(payment_methods)
         
         # Crear usuarios iniciales
         if not User.query.first():

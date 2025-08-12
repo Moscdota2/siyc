@@ -90,28 +90,28 @@
 
     {% if current_user.role == 'admin' %}
     <div class="payment-section">
-        <form action="{% if is_bar_order %}{{ url_for('close_bar_order', order_id=order.id) }}{% else %}{{ url_for('close_order', table_id=table.id) }}{% endif %}" method="POST">
-            <div class="form-group">
-                <label for="payment_method">Método de Pago:</label>
-                <select name="payment_method" class="form-control" required>
-                    <option value="efectivo">Efectivo</option>
-                    <option value="transferencia">Transferencia</option>
-                    <option value="divisas">Divisas</option>
-                </select>
-            </div>
-            <button type="submit" class="btn btn-success">Confirmar Pago</button>
-        </form>
+        <button type="button" class="btn btn-success" data-toggle="modal" data-target="#paymentModal">
+            Registrar Pago
+        </button>
     </div>
     {% endif %}
+    {% endif %}
+
+    <!-- Modal de pago (fuera de los bloques condicionales para asegurar su renderizado) -->
+    {% if current_user.role == 'admin' and order.status == "pendiente" %}
+    <div class="modal fade" id="paymentModal" tabindex="-1" role="dialog" aria-labelledby="paymentModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                {% include 'sales/payment_modal.html' %}
+            </div>
+        </div>
+    </div>
     {% endif %}
 
     <a href="{% if is_bar_order %}{{ url_for('sales') }}{% else %}{{ url_for('view_tables') }}{% endif %}" class="btn btn-back">
         {% if is_bar_order %}Volver a Ventas{% else %}Volver a Mesas{% endif %}
     </a>
 </div>
-
-
-
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {

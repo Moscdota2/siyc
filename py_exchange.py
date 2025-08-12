@@ -23,7 +23,7 @@ class ExchangeRate(db.Model):
 
 def get_current_rate():
     rate = ExchangeRate.query.filter_by(is_active=True).order_by(ExchangeRate.created_at.desc()).first()
-    return rate.rate if rate else 38.0  # Valor por defecto
+    return rate.rate if rate else 150.0  # Valor por defecto
 
 def update_rate(new_rate):
     ExchangeRate.query.update({'is_active': False})

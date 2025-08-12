@@ -23,9 +23,14 @@
         <label for="exit_type">Tipo de Salida:</label>
         <select class="form-control" name="exit_type" required>
             <option value="individual">1 Unidad</option>
-            <option value="tobo">Tobo (12 unidades)</option>
-            <option value="media_caja">Media Caja (18 unidades)</option>
-            <option value="caja">Caja Completa (36 unidades)</option>
+            {% if product.category in ['Cerveza'] %}
+                <option value="tobo">Tobo (12 unidades)</option>
+                <option value="media_caja">Media Caja (18 unidades)</option>
+                <option value="caja">Caja Completa (36 unidades)</option>
+            {% elif product.category in ['Ron'] %}
+                <option value="media_caja">Media Caja (3 unidades)</option>
+                <option value="caja">Caja Completa (6 unidades)</option>
+            {% endif %}
         </select>
     </div>
     

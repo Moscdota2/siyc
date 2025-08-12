@@ -147,7 +147,102 @@
                 </button>
             </form>
         </div>
+
+        <div class="inventory-card anis-card">
+        <div class="card-header">
+            <i class="fas fa-wine-bottle"></i>
+            <h2>Anís</h2>
+            <span class="badge">1 und/botella</span>
+        </div>
+        
+        <form method="POST" class="inventory-form">
+            <input type="hidden" name="product_type" value="anis">
+            
+            <div class="form-group animated-input">
+                <select name="product_id" class="form-control" required>
+                    <option value="" disabled selected>Selecciona un anís</option>
+                    {% for product in products if product.category == 'Anís' %}
+                    <option value="{{ product.id }}">{{ product.brand }} {{ product.name }}</option>
+                    {% endfor %}
+                </select>
+                <label class="input-label">Producto</label>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group animated-input">
+                    <input type="number" name="boxes" step="1" min="1" class="form-control" required>
+                    <label class="input-label">Cantidad (botellas)</label>
+                </div>
+                
+                <div class="form-group">
+                    <div class="currency-toggle">
+                        <button type="button" class="currency-btn active" data-currency="usd">USD</button>
+                        <button type="button" class="currency-btn" data-currency="bs">BS</button>
+                        <input type="hidden" name="currency" value="usd">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group animated-input">
+                <input type="number" name="purchase_price" step="0.01" min="0" class="form-control" required>
+                <label class="input-label">Precio total</label>
+                <span class="currency-symbol">$</span>
+            </div>
+            
+            <button type="submit" class="submit-btn anis-btn">
+                <i class="fas fa-save"></i> Registrar Anís
+            </button>
+        </form>
     </div>
+    </div>
+
+    <div class="inventory-card whisky-card">
+        <div class="card-header">
+            <i class="fas fa-whiskey-glass"></i>
+            <h2>Whisky</h2>
+            <span class="badge">1 und/botella</span>
+        </div>
+        
+        <form method="POST" class="inventory-form">
+            <input type="hidden" name="product_type" value="whisky">
+            
+            <div class="form-group animated-input">
+                <select name="product_id" class="form-control" required>
+                    <option value="" disabled selected>Selecciona un whisky</option>
+                    {% for product in products if product.category == 'Whisky' %}
+                    <option value="{{ product.id }}">{{ product.brand }} {{ product.name }}</option>
+                    {% endfor %}
+                </select>
+                <label class="input-label">Producto</label>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group animated-input">
+                    <input type="number" name="boxes" step="1" min="1" class="form-control" required>
+                    <label class="input-label">Cantidad (botellas)</label>
+                </div>
+                
+                <div class="form-group">
+                    <div class="currency-toggle">
+                        <button type="button" class="currency-btn active" data-currency="usd">USD</button>
+                        <button type="button" class="currency-btn" data-currency="bs">BS</button>
+                        <input type="hidden" name="currency" value="usd">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group animated-input">
+                <input type="number" name="purchase_price" step="0.01" min="0" class="form-control" required>
+                <label class="input-label">Precio total</label>
+                <span class="currency-symbol">$</span>
+            </div>
+            
+            <button type="submit" class="submit-btn whisky-btn">
+                <i class="fas fa-save"></i> Registrar Whisky
+            </button>
+        </form>
+    </div>
+
 </div>
 
 <script>
