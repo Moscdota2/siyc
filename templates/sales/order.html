@@ -38,6 +38,7 @@
                 <tr>
                     <th>Producto</th>
                     <th>Cantidad</th>
+                    <th>Tipo</th>
                     <th>P. Unitario</th>
                     <th>Subtotal</th>
                 </tr>
@@ -45,8 +46,20 @@
             <tbody>
                 {% for item in order_details %}
                 <tr>
-                    <td>{{ item.product.name }}</td>
+                    <td>
+                        {{ item.product.name }}
+                        {% if item.product.is_combo and item.product.combo_items %}
+                        <div class="combo-details">
+                            <strong>Contiene:</strong>
+                            {% for comp in item.product.combo_items %}
+                                {% set p = products|selectattr('id', 'equalto', comp.product_id)|first %}
+                                <div>- {{ comp.quantity }}x {{ p.name if p else '???' }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </td>
                     <td>{{ item.quantity }}</td>
+                    <td>{{ 'COMBO' if item.product.is_combo else item.exit_type|upper }}</td>
                     <td>${{ "%.2f"|format(item.subtotal/item.quantity) }}</td>
                     <td>${{ "%.2f"|format(item.subtotal) }}</td>
                 </tr>
@@ -54,7 +67,7 @@
             </tbody>
             <tfoot>
                 <tr>
-                    <td colspan="3"><strong>TOTAL</strong></td>
+                    <td colspan="4" class="text-right"><strong>TOTAL</strong></td>
                     <td><strong>${{ "%.2f"|format(order.total_price) }}</strong></td>
                 </tr>
             </tfoot>
@@ -66,12 +79,63 @@
         <h3>Agregar Más Productos</h3>
         <form action="{% if is_bar_order %}{{ url_for('add_product_to_bar_order', order_id=order.id) }}{% else %}{{ url_for('add_product', table_id=table.id) }}{% endif %}" method="POST">
             <div class="form-row">
-                <select name="product_id" class="form-control" required>
-                    {% for product in products if product.quantity > 0 %}
-                        <option value="{{ product.id }}">
-                            {{ product.name }} (${{ "%.2f"|format(product.price_usd) }}) - Stock: {{ product.quantity }}
-                        </option>
-                    {% endfor %}
+                <select name="product_id" class="form-control" id="product_select" required>
+                    <option value="">Seleccione un producto</option>
+                    
+                    <!-- Productos individuales con stock -->
+                    <optgroup label="Productos Individuales">
+                        {% for product in products if (product.quantity > 0 and not product.is_combo) %}
+                            <option value="{{ product.id }}" 
+                                    data-price-unit="{{ product.price_unit_usd }}"
+                                    data-price-half-tobo="{{ product.price_half_tobo_usd }}"
+                                    data-price-tobo="{{ product.price_tobo_usd }}"
+                                    data-price-half-box="{{ product.price_half_box_usd }}"
+                                    data-price-box="{{ product.price_box_usd }}"
+                                    data-is-combo="false"
+                                    data-stock="{{ product.quantity }}">
+                                {{ product.name }} (${{ "%.2f"|format(product.price_usd) }}) - Stock: {{ product.quantity }}
+                            </option>
+                        {% endfor %}
+                    </optgroup>
+                    
+                    <!-- Combos disponibles -->
+                    <optgroup label="Servicios (Combos)">
+                        {% for product in products if product.is_combo %}
+                            {% set combo_available = True %}
+                            {% set min_available = 0 %}
+                            
+                            {% if product.combo_items %}
+                                {% for item in product.combo_items %}
+                                    {% set component = products|selectattr("id", "equalto", item.product_id)|first %}
+                                    {% if not component or component.quantity < item.quantity %}
+                                        {% set combo_available = False %}
+                                    {% else %}
+                                        {% set item_available = (component.quantity // item.quantity) %}
+                                        {% if min_available == 0 or item_available < min_available %}
+                                            {% set min_available = item_available %}
+                                        {% endif %}
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+                            
+                            {% if combo_available %}
+                                <option value="{{ product.id }}" 
+                                        data-price="{{ product.price_usd }}"
+                                        data-is-combo="true"
+                                        data-stock="{{ min_available }}">
+                                    {{ product.name }} (${{ "%.2f"|format(product.price_usd) }})
+                                    {% if min_available > 0 %} - Disponibles: {{ min_available }}{% endif %}
+                                    {% if product.combo_items %}
+                                        (Incluye: 
+                                        {% for item in product.combo_items %}
+                                            {% set comp = products|selectattr("id", "equalto", item.product_id)|first %}
+                                            {{ item.quantity }}x {{ comp.name if comp else '???' }}{% if not loop.last %}, {% endif %}
+                                        {% endfor %})
+                                    {% endif %}
+                                </option>
+                            {% endif %}
+                        {% endfor %}
+                    </optgroup>
                 </select>
                 
                 <select name="exit_type" class="form-control" id="exit_type_selector">
@@ -87,7 +151,6 @@
             </div>
         </form>
     </div>
-
     {% if current_user.role == 'admin' %}
     <div class="payment-section">
         <button type="button" class="btn btn-success" data-toggle="modal" data-target="#paymentModal">
@@ -97,7 +160,7 @@
     {% endif %}
     {% endif %}
 
-    <!-- Modal de pago (fuera de los bloques condicionales para asegurar su renderizado) -->
+    <!-- Modal de pago -->
     {% if current_user.role == 'admin' and order.status == "pendiente" %}
     <div class="modal fade" id="paymentModal" tabindex="-1" role="dialog" aria-labelledby="paymentModalLabel" aria-hidden="true">
         <div class="modal-dialog" role="document">
@@ -113,8 +176,72 @@
     </a>
 </div>
 
+<style>
+.order-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.order-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+.order-table th, .order-table td {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+
+.order-table th {
+    background-color: #f5f5f5;
+}
+
+.status-badge {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.status-badge.pending {
+    background-color: #ffc107;
+    color: #000;
+}
+
+.status-badge.paid {
+    background-color: #28a745;
+    color: #fff;
+}
+
+.combo-details {
+    margin-top: 5px;
+    padding-left: 10px;
+    border-left: 2px solid #ffc107;
+    font-size: 0.85em;
+    color: #6c757d;
+}
+
+.form-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.form-row select, .form-row input {
+    flex: 1;
+}
+
+.btn-back {
+    margin-top: 20px;
+    display: inline-block;
+}
+</style>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const productSelect = document.getElementById('product_select');
     const exitTypeSelector = document.getElementById('exit_type_selector');
     const quantityInput = document.getElementById('quantity_input');
     
@@ -153,6 +280,17 @@ document.addEventListener('DOMContentLoaded', function() {
             else if (qty === 18) exitTypeSelector.value = 'half_box';
             else if (qty === 36) exitTypeSelector.value = 'box';
         } else {
+            exitTypeSelector.value = 'individual';
+        }
+    });
+    
+    // Deshabilitar selector de tipo de salida para combos
+    productSelect.addEventListener('change', function() {
+        const selectedOption = this.selectedOptions[0];
+        const isCombo = selectedOption && selectedOption.dataset.isCombo === 'true';
+        
+        exitTypeSelector.disabled = isCombo;
+        if (isCombo) {
             exitTypeSelector.value = 'individual';
         }
     });

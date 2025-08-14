@@ -185,7 +185,7 @@ def delete_product(id):
     
     return redirect(url_for('inventory'))
 
-# En la ruta de inventory_entry
+
 @app.route('/inventory_entry', methods=['GET', 'POST'])
 @manager_or_admin_required
 def inventory_entry():
@@ -195,7 +195,7 @@ def inventory_entry():
         product_type = request.form.get('product_type', '')
         currency = request.form['currency']  # 'usd' o 'bs'
         purchase_price = float(request.form['purchase_price'])
-        distributor = request.form.get('distributor', '')  # Solo para cerveza y ron
+        distributor = request.form.get('distributor', '')  # Solo para cerveza
         
         product = Product.query.get_or_404(product_id)
         
@@ -203,7 +203,9 @@ def inventory_entry():
         if product_type == 'cerveza':
             units_per_box = 36
         elif product_type == 'ron':
-            units_per_box = 6
+            units_per_box = 1  # Ahora se registra por botella individual
+        elif product_type == 'misc':
+            units_per_box = 1
         else:  # Anís, whisky y otros
             units_per_box = 1
         
@@ -216,44 +218,54 @@ def inventory_entry():
                     usd_price_per_box = 20.80
                 else:  # regional
                     usd_price_per_box = 19.50
+                total_usd_investment = boxes * usd_price_per_box
             elif product_type == 'ron':
-                usd_price_per_box = 15.00  # Precio fijo por caja de ron en BS
+                # Para ron en BS, calculamos precio unitario
+                usd_price_per_unit = purchase_price / (units * precio_bcv_actual)
+                total_usd_investment = usd_price_per_unit * units
+            elif product_type == 'misc':
+                usd_price_per_unit = purchase_price / (units * precio_bcv_actual)
+                total_usd_investment = usd_price_per_unit * units
             else:  # Anís, whisky
-                usd_price_per_box = purchase_price / precio_bcv_actual
+                usd_price_per_unit = purchase_price / (units * precio_bcv_actual)
+                total_usd_investment = usd_price_per_unit * units
         else:  # USD
             if product_type == 'cerveza':
                 if distributor == 'polar':
                     usd_price_per_box = 17.00
                 else:  # regional
                     usd_price_per_box = 19.00
+                total_usd_investment = boxes * usd_price_per_box
             elif product_type == 'ron':
-                usd_price_per_box = 15.00  # Precio fijo por caja de ron en USD
+                # Para ron en USD, calculamos precio unitario
+                usd_price_per_unit = purchase_price / units
+                total_usd_investment = usd_price_per_unit * units
+            elif product_type == 'misc':
+                usd_price_per_unit = purchase_price / units
+                total_usd_investment = usd_price_per_unit * units
             else:  # Anís, whisky
-                usd_price_per_box = purchase_price
-        
-        total_usd_investment = boxes * usd_price_per_box
+                usd_price_per_unit = purchase_price / units
+                total_usd_investment = usd_price_per_unit * units
         
         # Actualizar inventario
         product.quantity += units
-        if product_type in ['cerveza', 'ron']:
+        if product_type == 'cerveza':  # Solo cerveza actualiza box_quantity ahora
             product.box_quantity += boxes
         
-       # Registrar movimiento con detalles financieros
+        # Registrar movimiento con detalles financieros
         movement = InventoryMovement(
             product_id=product.id,
             user_id=current_user.id,
             movement_type='entrada',
             quantity=units,
-            boxes=boxes,
+            boxes=boxes if product_type == 'cerveza' else None,  # Solo cerveza registra cajas
             units_per_box=units_per_box,
             currency=currency,
             purchase_price=purchase_price,
-            distributor=distributor if product_type in ['cerveza', 'ron'] else 'sistema',
-            notes=f"Entrada de {boxes} {'cajas' if product_type in ['cerveza', 'ron'] else 'botellas'} de {product.name} ({units} unidades)"
+            distributor=distributor if product_type == 'cerveza' else 'sistema',  # Solo cerveza usa distribuidor
+            notes=f"Entrada de {boxes} {'cajas' if product_type == 'cerveza' else 'botellas'} de {product.name} ({units} unidades)",
+            total_usd_investment=total_usd_investment
         )
-        
-        # Asignar el valor después de crear el objeto
-        movement.total_usd_investment = total_usd_investment
         
         try:
             db.session.add(movement)
@@ -270,12 +282,14 @@ def inventory_entry():
     rums = Product.query.filter_by(category='Ron').all()
     anises = Product.query.filter_by(category='Anís').all()
     whiskies = Product.query.filter_by(category='Whisky').all()
+    miscs = Product.query.filter_by(category='Misceláneo').all()
     
     return render_template(
         "inventory/inventory_entry.html",
-        products=beers + rums + anises + whiskies,
+        products=beers + rums + anises + whiskies + miscs,
         precio_bcv=precio_bcv_actual
     )
+
 
 # Necesitaríamos también una nueva ruta para reportes de inversión
 @app.route('/inventory_investment_report')
@@ -414,6 +428,7 @@ def create_order(table_id):
         flash(f'Error al crear pedido: {str(e)}', 'danger')
         return redirect(url_for('view_tables'))
 
+
 @app.route('/order/<int:table_id>')
 @login_required
 def view_order(table_id):
@@ -425,7 +440,21 @@ def view_order(table_id):
         return redirect(url_for('view_tables'))
     
     order_details = OrderDetail.query.filter_by(order_id=active_order.id).all()
-    products = Product.query.filter(Product.quantity > 0).all()
+    
+    ## Preparar combos con nombres de productos
+    for detail in order_details:
+        if detail.product.is_combo and detail.product.combo_items:
+            enriched_items = []
+            for combo_item in detail.product.combo_items:
+                product = Product.query.get(combo_item.get('product_id'))
+                if product:
+                    enriched_items.append({
+                        'name': product.name,
+                        'quantity': combo_item.get('quantity', 1)
+                    })
+            detail.combo_contents = enriched_items  # <- atributo dinámico
+    
+    products = Product.query.all()
     payment_methods = PaymentMethod.query.filter_by(is_active=True).order_by(PaymentMethod.currency, PaymentMethod.name).all()
     
     return render_template('sales/order.html', 
@@ -434,7 +463,8 @@ def view_order(table_id):
                          products=products,
                          table=table,
                          payment_methods=payment_methods,
-                         current_rate=get_current_rate())  # Añade esto
+                         current_rate=get_current_rate(),
+                         is_bar_order=False)
 
 
 @app.route('/add_product/<int:table_id>', methods=['POST'])
@@ -450,29 +480,92 @@ def add_product(table_id):
     exit_type = request.form.get('exit_type', 'individual')
     quantity = int(request.form['quantity'])
     
-    # Calcular subtotal según la lógica de agrupamiento
+    # Manejo especial para combos
+    if product.is_combo:
+        # Verificar stock para cada componente del combo
+        for item in product.combo_items:
+            component = Product.query.get(item['product_id'])
+            if not component or component.quantity < (item['quantity'] * quantity):
+                flash(f'Stock insuficiente de {component.name if component else "componente"} para el combo {product.name}', 'danger')
+                return redirect(url_for('view_order', table_id=table_id))
+        
+        # Calcular subtotal para combos
+        subtotal = product.price_usd * quantity
+        exit_type = 'combo'
+        
+        # Crear detalle de orden para el combo
+        order_detail = OrderDetail(
+            order_id=active_order.id,
+            product_id=product.id,
+            quantity=quantity,
+            subtotal=subtotal,
+            exit_type=exit_type
+        )
+        
+        # Actualizar total de la orden
+        active_order.total_price += subtotal
+        
+        # Actualizar inventario de componentes
+        for item in product.combo_items:
+            component = Product.query.get(item['product_id'])
+            component.quantity -= (item['quantity'] * quantity)
+            
+            # Registrar movimiento de inventario para componentes
+            movement = InventoryMovement(
+                product_id=component.id,
+                user_id=current_user.id,
+                movement_type='salida',
+                quantity=item['quantity'] * quantity,
+                exit_type='combo',
+                notes=f'Componente de {product.name} (Orden #{active_order.id})',
+                is_locked=True
+            )
+            db.session.add(movement)
+            
+        try:
+            db.session.add(order_detail)
+            db.session.commit()
+            flash(f'{quantity}x {product.name} agregado al pedido', 'success')
+            return redirect(url_for('view_order', table_id=table_id))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al agregar combo: {str(e)}', 'danger')
+            return redirect(url_for('view_order', table_id=table_id))
+    
+    # Lógica para productos individuales
     if exit_type == 'individual':
-        # Calcular cuántos tobos completos y medios hay
         tobos = quantity // 12
         remaining = quantity % 12
         half_tobos = remaining // 6
         
-        subtotal = (tobos * product.price_tobo_usd) + (half_tobos * product.price_half_tobo_usd)
+        subtotal = (tobos * (product.price_tobo_usd or 0)) + \
+                  (half_tobos * (product.price_half_tobo_usd or 0))
         
-        # Si queda algo que no es medio tobo, cobrar como unidades
         remaining_units = remaining % 6
         if remaining_units > 0:
-            subtotal += remaining_units * product.price_unit_usd
+            subtotal += remaining_units * (product.price_unit_usd or 0)
     elif exit_type == 'half_tobo':
+        if not product.price_half_tobo_usd:
+            flash('Precio de medio tobo no configurado para este producto', 'danger')
+            return redirect(url_for('view_order', table_id=table_id))
         subtotal = product.price_half_tobo_usd
         quantity = 6
     elif exit_type == 'tobo':
+        if not product.price_tobo_usd:
+            flash('Precio de tobo no configurado para este producto', 'danger')
+            return redirect(url_for('view_order', table_id=table_id))
         subtotal = product.price_tobo_usd
         quantity = 12
     elif exit_type == 'half_box':
+        if not product.price_half_box_usd:
+            flash('Precio de media caja no configurado para este producto', 'danger')
+            return redirect(url_for('view_order', table_id=table_id))
         subtotal = product.price_half_box_usd
         quantity = 18
     elif exit_type == 'box':
+        if not product.price_box_usd:
+            flash('Precio de caja no configurado para este producto', 'danger')
+            return redirect(url_for('view_order', table_id=table_id))
         subtotal = product.price_box_usd
         quantity = 36
     else:
@@ -491,13 +584,9 @@ def add_product(table_id):
         exit_type=exit_type
     )
     
-    # Actualizar total de la orden
     active_order.total_price += subtotal
-    
-    # Descontar del inventario
     product.quantity -= quantity
     
-    # Registrar movimiento de inventario
     movement = InventoryMovement(
         product_id=product.id,
         user_id=current_user.id,
@@ -637,31 +726,80 @@ def edit_movement(movement_id):
     return render_template('edit_movement.html', movement=movement)
 
 
-# Ventas/Consumo
+# Ventas/Consumo - Versión actualizada
 @app.route('/sales', methods=['GET', 'POST'])
 @login_required
 def sales():
     if request.method == 'POST':
-        # Procesar el formulario de venta
         sale_type = request.form['sale_type']
         
         if sale_type == 'mesa':
             table_id = request.form['table_id']
-            # Procesar orden para mesa
         elif sale_type == 'barra':
             customer_name = request.form.get('customer_name', 'Consumo en barra')
-            # Procesar orden para barra
-
         return redirect(url_for('sales'))
     
-    # Obtener productos y mesas
-    products = [{
-        'id': p.id,
-        'name': p.name,
-        'price_usd': float(p.price_usd),
-        'quantity': p.quantity
-    } for p in Product.query.filter(Product.quantity > 0).all()]
+    # Obtener productos individuales con stock
+    individual_products = Product.query.filter(
+        Product.quantity > 0, 
+        Product.is_combo == False
+    ).all()
+
+    # Procesar combos con disponibilidad real
+    available_combos = []
+    for combo in Product.query.filter_by(is_combo=True).all():
+        combo_data = {
+            'id': combo.id,
+            'name': combo.name,
+            'price_usd': float(combo.price_usd),
+            'is_combo': True,
+            'combo_items': combo.combo_items,
+            'available_quantity': float('inf')  # Inicializar con valor alto
+        }
+
+        # Calcular disponibilidad basada en componentes
+        for item in combo.combo_items:
+            component = Product.query.get(item['product_id'])
+            if not component or component.quantity < item['quantity']:
+                combo_data['available_quantity'] = 0
+                break
+            
+            # Calcular cuántos combos se pueden hacer con este componente
+            possible_quantity = component.quantity // item['quantity']
+            if possible_quantity < combo_data['available_quantity']:
+                combo_data['available_quantity'] = possible_quantity
+        
+        if combo_data['available_quantity'] > 0:
+            available_combos.append(combo_data)
+
+    # Preparar datos para la plantilla
+    products_data = []
     
+    # Productos individuales
+    for product in individual_products:
+        products_data.append({
+            'id': product.id,
+            'name': product.name,
+            'price_usd': float(product.price_usd),
+            'quantity': product.quantity,
+            'is_combo': False,
+            'available_quantity': product.quantity,
+            'category': product.category
+        })
+    
+    # Combos disponibles
+    for combo in available_combos:
+        products_data.append({
+            'id': combo['id'],
+            'name': combo['name'],
+            'price_usd': combo['price_usd'],
+            'quantity': 0,  # Los combos no tienen stock físico
+            'is_combo': True,
+            'available_quantity': combo['available_quantity'],
+            'combo_items': combo['combo_items'],
+            'category': 'Combo'
+        })
+
     tables = [{
         'id': t.id,
         'number': t.number,
@@ -669,9 +807,9 @@ def sales():
     } for t in Table.query.all()]
     
     return render_template('sales/sales.html', 
-                         products=products, 
-                         tables=tables)
-
+                         products=products_data, 
+                         tables=tables,
+                         debug=True)
 
 
 @app.route('/sales_reports')
@@ -694,22 +832,26 @@ def sales_reports():
                          total_bs=total_bs,
                          current_rate=get_current_rate())
 
+
 @app.route('/register_sale', methods=['POST'])
 @login_required
 def register_sale():
     if request.method == 'POST':
         try:
-            # Obtener datos del formulario
+            print("Iniciando registro de venta")
             sale_type = request.form['sale_type']
             product_ids = request.form.getlist('product_id[]')
             quantities = request.form.getlist('quantity[]')
-            exit_types = request.form.getlist('exit_type[]')
-            
-            # Crear nueva orden
+            exit_types = request.form.getlist('exit_type[]') or ['individual'] * len(product_ids)
+            print(f"Datos recibidos - sale_type: {sale_type}, product_ids: {product_ids}, quantities: {quantities}, exit_types: {exit_types}")
+
             if sale_type == 'mesa':
+                print("Procesando venta de mesa")
                 table_id = request.form['table_id']
                 table = Table.query.get_or_404(table_id)
+                print(f"Mesa encontrada: {table.id} - Estado: {table.status}")
                 if table.status != "disponible":
+                    print("Mesa no disponible")
                     flash('La mesa ya está ocupada', 'danger')
                     return redirect(url_for('sales'))
                 
@@ -719,97 +861,164 @@ def register_sale():
                     waiter_id=current_user.id
                 )
                 table.status = "ocupada"
-                db.session.add(table)  # Asegurarse de que la mesa se actualice
+                db.session.add(table)
+                print(f"Nueva orden creada para mesa {table_id} - Mesero: {current_user.id}")
             else:
+                print("Procesando venta de barra")
                 customer_name = request.form.get('customer_name', 'Consumo en barra')
                 new_order = Order(
                     customer_name=customer_name,
                     status="pendiente",
                     waiter_id=current_user.id,
-                    table_id=None  # Asegurarse de que no tenga mesa asociada
+                    table_id=None
                 )
+                print(f"Nueva orden creada para barra - Cliente: {customer_name}")
             
             db.session.add(new_order)
-            db.session.flush()  # Para obtener el ID de la orden
+            db.session.flush()
+            print(f"Orden temporal creada con ID: {new_order.id}")
             
-            # Procesar productos
             total = 0
-            for product_id, quantity, exit_type in zip(product_ids, quantities, exit_types):
+            for i, product_id in enumerate(product_ids):
+                quantity = quantities[i]
+                exit_type = exit_types[i] if i < len(exit_types) else 'individual'
+                
+                print(f"Procesando producto {product_id} - cantidad {quantity} - tipo salida {exit_type}")
                 product = Product.query.get_or_404(product_id)
                 quantity = int(quantity)
+                print(f"Producto encontrado: {product.name} - Stock actual: {product.quantity}")
                 
-                if product.quantity < quantity:
-                    flash(f'Stock insuficiente de {product.name}', 'danger')
-                    db.session.rollback()
-                    return redirect(url_for('sales'))
-                
-                # Calcular subtotal según tipo de salida
-                if exit_type == 'individual':
-                    # Calcular agrupamientos automáticos
-                    tobos = quantity // 12
-                    remaining = quantity % 12
-                    half_tobos = remaining // 6
-                    units = remaining % 6
+                if product.is_combo:
+                    print(f"Procesando combo {product.name}")
+                    # Registrar el combo como producto vendido
+                    order_detail = OrderDetail(
+                        order_id=new_order.id,
+                        product_id=product.id,
+                        quantity=quantity,
+                        subtotal=product.price_usd * quantity,
+                        exit_type='combo'
+                    )
+                    db.session.add(order_detail)
+                    total += product.price_usd * quantity
+                    print(f"Detalle de combo agregado - Subtotal: {product.price_usd * quantity}")
                     
-                    subtotal = (tobos * product.price_tobo_usd) + \
-                               (half_tobos * product.price_half_tobo_usd) + \
-                               (units * product.price_unit_usd)
-                elif exit_type == 'half_tobo':
-                    subtotal = product.price_half_tobo_usd
-                    quantity = 6
-                elif exit_type == 'tobo':
-                    subtotal = product.price_tobo_usd
-                    quantity = 12
-                elif exit_type == 'half_box':
-                    subtotal = product.price_half_box_usd
-                    quantity = 18
-                elif exit_type == 'box':
-                    subtotal = product.price_box_usd
-                    quantity = 36
+                    # Manejar componentes del combo
+                    if not product.combo_items:
+                        print("¡ADVERTENCIA! El combo no tiene items definidos")
+                        continue
+                        
+                    for item in product.combo_items:
+                        component_id = item.get('product_id')
+                        component_qty = item.get('quantity', 1)
+                        print(f"Procesando componente {component_id} del combo")
+                        
+                        component = Product.query.get(component_id)
+                        if not component:
+                            print(f"¡ERROR! Componente {component_id} no encontrado")
+                            continue
+                            
+                        required_qty = component_qty * quantity
+                        print(f"Stock actual: {component.quantity} | Necesario: {required_qty}")
+                        
+                        if component.quantity < required_qty:
+                            print("¡ERROR! Stock insuficiente para componente")
+                            db.session.rollback()
+                            flash(f'Stock insuficiente para {component.name} en combo {product.name}', 'danger')
+                            return redirect(url_for('sales'))
+                        
+                        component.quantity -= required_qty
+                        print(f"Nuevo stock: {component.quantity}")
+                        
+                        movement = InventoryMovement(
+                            product_id=component.id,
+                            user_id=current_user.id,
+                            movement_type='salida',
+                            quantity=required_qty,
+                            exit_type='combo',
+                            notes=f'Componente de {product.name} (Orden #{new_order.id})'
+                        )
+                        db.session.add(movement)
+                        print(f"Movimiento de inventario registrado para componente")
                 else:
-                    subtotal = product.price_usd * quantity
-                
-                total += subtotal
-                
-                order_detail = OrderDetail(
-                    order_id=new_order.id,
-                    product_id=product.id,
-                    quantity=quantity,
-                    subtotal=subtotal,
-                    exit_type=exit_type
-                )
-                
-                # Actualizar inventario
-                product.quantity -= quantity
-                db.session.add(order_detail)
-                
-                # Registrar movimiento de inventario
-                movement = InventoryMovement(
-                    product_id=product.id,
-                    user_id=current_user.id,
-                    movement_type='salida',
-                    quantity=quantity,
-                    exit_type=exit_type if exit_type != 'individual' else 'venta',
-                    notes=f'Despachado en orden #{new_order.id} (pendiente de pago)',
-                )
-                db.session.add(movement)
+                    print("Procesando producto individual")
+                    if exit_type == 'individual':
+                        print("Calculando precio individual")
+                        tobos = quantity // 12
+                        remaining = quantity % 12
+                        half_tobos = remaining // 6
+                        units = remaining % 6
+                        
+                        subtotal = (tobos * product.price_tobo_usd) + \
+                                (half_tobos * product.price_half_tobo_usd) + \
+                                (units * product.price_unit_usd)
+                        print(f"Subtotal calculado: {subtotal}")
+                    elif exit_type == 'half_tobo':
+                        subtotal = product.price_half_tobo_usd
+                        quantity = 6
+                        print(f"Subtotal medio tobo: {subtotal}")
+                    elif exit_type == 'tobo':
+                        subtotal = product.price_tobo_usd
+                        quantity = 12
+                        print(f"Subtotal tobo completo: {subtotal}")
+                    elif exit_type == 'half_box':
+                        subtotal = product.price_half_box_usd
+                        quantity = 18
+                        print(f"Subtotal media caja: {subtotal}")
+                    elif exit_type == 'box':
+                        subtotal = product.price_box_usd
+                        quantity = 36
+                        print(f"Subtotal caja completa: {subtotal}")
+                    else:
+                        subtotal = product.price_usd * quantity
+                        print(f"Subtotal normal: {subtotal}")
+                    
+                    total += subtotal
+                    print(f"Total acumulado: {total}")
+                    
+                    order_detail = OrderDetail(
+                        order_id=new_order.id,
+                        product_id=product.id,
+                        quantity=quantity,
+                        subtotal=subtotal,
+                        exit_type=exit_type
+                    )
+                    db.session.add(order_detail)
+                    print(f"Detalle de orden agregado para producto individual")
+
+                    product.quantity -= quantity
+                    print(f"Stock de producto actualizado: {product.quantity}")
+                    
+                    movement = InventoryMovement(
+                        product_id=product.id,
+                        user_id=current_user.id,
+                        movement_type='salida',
+                        quantity=quantity,
+                        exit_type=exit_type if exit_type != 'individual' else 'venta',
+                        notes=f'Despachado en orden #{new_order.id} (pendiente de pago)',
+                    )
+                    db.session.add(movement)
+                    print(f"Movimiento de inventario registrado para producto individual")
             
-            # Actualizar total de la orden
             new_order.total_price = total
+            print(f"Total final de la orden: {total}")
             
             db.session.commit()
+            print("Orden registrada exitosamente en la base de datos")
             flash('Orden creada exitosamente', 'success')
             
-            # Redirigir según tipo de orden
             if sale_type == 'mesa':
+                print(f"Redirigiendo a vista de mesa {table_id}")
                 return redirect(url_for('view_order', table_id=table_id))
             else:
+                print(f"Redirigiendo a vista de barra con orden {new_order.id}")
                 return redirect(url_for('view_bar_order', order_id=new_order.id))
             
         except Exception as e:
+            print(f"Error en registro de venta: {str(e)}")
             db.session.rollback()
             flash(f'Error al registrar orden: {str(e)}', 'danger')
             return redirect(url_for('sales'))
+
 
 
 @app.route('/bar_order/<int:order_id>')
@@ -822,17 +1031,31 @@ def view_bar_order(order_id):
         return redirect(url_for('sales_reports'))
     
     order_details = OrderDetail.query.filter_by(order_id=order.id).all()
-    products = Product.query.filter(Product.quantity > 0).all()
+
+    # Preparar combos con nombres de productos
+    for detail in order_details:
+        if detail.product.is_combo and detail.product.combo_items:
+            enriched_items = []
+            for combo_item in detail.product.combo_items:
+                product = Product.query.get(combo_item.get('product_id'))
+                if product:
+                    enriched_items.append({
+                        'name': product.name,
+                        'quantity': combo_item.get('quantity', 1)
+                    })
+            detail.combo_contents = enriched_items  # <- atributo dinámico
+    # Incluir TODOS los productos, no solo los con stock
+    products = Product.query.all()
     payment_methods = PaymentMethod.query.filter_by(is_active=True).order_by(PaymentMethod.currency, PaymentMethod.name).all()
     
     return render_template('sales/order.html', 
-                        payment_methods=payment_methods,
                          order=order, 
                          order_details=order_details, 
                          products=products,
+                         payment_methods=payment_methods,
                          is_bar_order=True,
                          table=None,
-                         current_rate=get_current_rate())  # Añade esto
+                         current_rate=get_current_rate())
 
 
 @app.route('/add_product_to_bar_order/<int:order_id>', methods=['POST'])
@@ -848,27 +1071,92 @@ def add_product_to_bar_order(order_id):
     exit_type = request.form.get('exit_type', 'individual')
     quantity = int(request.form['quantity'])
     
-    # La misma lógica de cálculo que para las mesas
+    # Manejo especial para combos
+    if product.is_combo:
+        # Verificar stock para cada componente del combo
+        for item in product.combo_items:
+            component = Product.query.get(item['product_id'])
+            if not component or component.quantity < (item['quantity'] * quantity):
+                flash(f'Stock insuficiente de {component.name if component else "componente"} para el combo {product.name}', 'danger')
+                return redirect(url_for('view_bar_order', order_id=order_id))
+        
+        # Calcular subtotal para combos
+        subtotal = product.price_usd * quantity
+        exit_type = 'combo'
+        
+        # Crear detalle de orden para el combo
+        order_detail = OrderDetail(
+            order_id=order.id,
+            product_id=product.id,
+            quantity=quantity,
+            subtotal=subtotal,
+            exit_type=exit_type
+        )
+        
+        # Actualizar total de la orden
+        order.total_price += subtotal
+        
+        # Actualizar inventario de componentes
+        for item in product.combo_items:
+            component = Product.query.get(item['product_id'])
+            component.quantity -= (item['quantity'] * quantity)
+            
+            # Registrar movimiento de inventario para componentes
+            movement = InventoryMovement(
+                product_id=component.id,
+                user_id=current_user.id,
+                movement_type='salida',
+                quantity=item['quantity'] * quantity,
+                exit_type='combo',
+                notes=f'Componente de {product.name} (Orden #{order.id})',
+                is_locked=True
+            )
+            db.session.add(movement)
+            
+        try:
+            db.session.add(order_detail)
+            db.session.commit()
+            flash(f'{quantity}x {product.name} agregado a la orden', 'success')
+            return redirect(url_for('view_bar_order', order_id=order_id))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al agregar combo: {str(e)}', 'danger')
+            return redirect(url_for('view_bar_order', order_id=order_id))
+    
+    # Lógica para productos individuales
     if exit_type == 'individual':
         tobos = quantity // 12
         remaining = quantity % 12
         half_tobos = remaining // 6
         
-        subtotal = (tobos * product.price_tobo_usd) + (half_tobos * product.price_half_tobo_usd)
+        subtotal = (tobos * (product.price_tobo_usd or 0)) + \
+                  (half_tobos * (product.price_half_tobo_usd or 0))
         
         remaining_units = remaining % 6
         if remaining_units > 0:
-            subtotal += remaining_units * product.price_unit_usd
+            subtotal += remaining_units * (product.price_unit_usd or 0)
     elif exit_type == 'half_tobo':
+        if not product.price_half_tobo_usd:
+            flash('Precio de medio tobo no configurado para este producto', 'danger')
+            return redirect(url_for('view_bar_order', order_id=order_id))
         subtotal = product.price_half_tobo_usd
         quantity = 6
     elif exit_type == 'tobo':
+        if not product.price_tobo_usd:
+            flash('Precio de tobo no configurado para este producto', 'danger')
+            return redirect(url_for('view_bar_order', order_id=order_id))
         subtotal = product.price_tobo_usd
         quantity = 12
     elif exit_type == 'half_box':
+        if not product.price_half_box_usd:
+            flash('Precio de media caja no configurado para este producto', 'danger')
+            return redirect(url_for('view_bar_order', order_id=order_id))
         subtotal = product.price_half_box_usd
         quantity = 18
     elif exit_type == 'box':
+        if not product.price_box_usd:
+            flash('Precio de caja no configurado para este producto', 'danger')
+            return redirect(url_for('view_bar_order', order_id=order_id))
         subtotal = product.price_box_usd
         quantity = 36
     else:
@@ -912,6 +1200,7 @@ def add_product_to_bar_order(order_id):
     return redirect(url_for('view_bar_order', order_id=order_id))
 
 
+
 @app.route('/close_bar_order/<int:order_id>', methods=['POST'])
 @admin_required
 def close_bar_order(order_id):
@@ -921,7 +1210,6 @@ def close_bar_order(order_id):
         flash('Esta orden ya ha sido pagada', 'warning')
         return redirect(url_for('view_bar_order', order_id=order_id))
     
-    # Obtener datos del formulario
     try:
         payment_currency = request.form['payment_currency']
         payment_method_id = int(request.form['payment_method'])
@@ -945,9 +1233,9 @@ def close_bar_order(order_id):
             flash('El monto pagado no cubre el total', 'danger')
             return redirect(url_for('view_bar_order', order_id=order_id))
         
-        # Actualizar orden
+        # Actualizar orden (CORRECCIÓN PRINCIPAL: usar datetime.now())
         order.status = "pagado"
-        order.closed_at = datetime.now
+        order.closed_at = datetime.now()  # ¡Aquí estaba el error!
         order.payment_currency = payment_currency
         order.exchange_rate = current_rate
         order.payment_amount_bs = payment_amount_bs
@@ -968,10 +1256,6 @@ def close_bar_order(order_id):
         flash(f'Orden #{order.id} pagada con {payment_method.name} - ${payment_amount_usd:.2f} / {payment_amount_bs:.2f} Bs', 'success')
         return redirect(url_for('sales_reports'))
         
-    except KeyError as e:
-        db.session.rollback()
-        flash(f'Faltan datos en el formulario: {str(e)}', 'danger')
-        return redirect(url_for('view_bar_order', order_id=order_id))
     except Exception as e:
         db.session.rollback()
         flash(f'Error al procesar pago: {str(e)}', 'danger')

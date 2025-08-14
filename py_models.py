@@ -34,19 +34,18 @@ class Product(db.Model):
     modifier = db.relationship('User', backref='modified_products')
     cost_per_unit_usd = db.Column(db.Float)
     last_purchase_price = db.Column(db.Float)
-    # Precios especiales para cervezas
-    price_unit_usd = db.Column(db.Float)  # Precio por unidad (1 cerveza)
-    price_half_tobo_usd = db.Column(db.Float)  # Medio tobo (6 cervezas)
-    price_tobo_usd = db.Column(db.Float)  # Tobo completo (12 cervezas)
-    price_half_box_usd = db.Column(db.Float)  # Media caja (18 cervezas)
-    price_box_usd = db.Column(db.Float)  # Caja completa (36 cervezas)
-    
-    # Precios en bolívares
+    price_unit_usd = db.Column(db.Float)
+    price_half_tobo_usd = db.Column(db.Float)
+    price_tobo_usd = db.Column(db.Float)
+    price_half_box_usd = db.Column(db.Float)
+    price_box_usd = db.Column(db.Float)
     price_unit_bs = db.Column(db.Float)
     price_half_tobo_bs = db.Column(db.Float)
     price_tobo_bs = db.Column(db.Float)
     price_half_box_bs = db.Column(db.Float)
     price_box_bs = db.Column(db.Float)
+    is_combo = db.Column(db.Boolean, default=False)
+    combo_items = db.Column(db.JSON)
 
 class Table(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -65,10 +64,10 @@ class Order(db.Model):
     customer_name = db.Column(db.String(100), nullable=True)
     waiter_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     waiter = db.relationship('User', backref='orders')
-    payment_currency = db.Column(db.String(3))  # 'USD' o 'BS'
-    exchange_rate = db.Column(db.Float)  # Tasa usada en el pago
-    payment_amount_bs = db.Column(db.Float)  # Monto pagado en BS
-    payment_amount_usd = db.Column(db.Float)  # Monto pagado en USD
+    payment_currency = db.Column(db.String(3))
+    exchange_rate = db.Column(db.Float)
+    payment_amount_bs = db.Column(db.Float)
+    payment_amount_usd = db.Column(db.Float)
     payment_method_id = db.Column(db.Integer, db.ForeignKey('payment_method.id'))
     payment_method = db.relationship('PaymentMethod')
 
@@ -79,57 +78,47 @@ class OrderDetail(db.Model):
     quantity = db.Column(db.Integer, nullable=False, default=1)
     subtotal = db.Column(db.Float, nullable=False)
     exit_type = db.Column(db.String(20))
-    
-    # Relación con Product
     product = db.relationship('Product', backref='order_details')
 
 class InventoryMovement(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    movement_type = db.Column(db.String(20), nullable=False)  # 'entrada' o 'salida'
+    movement_type = db.Column(db.String(20), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
     movement_date = db.Column(db.DateTime, default=datetime.now(pytz.timezone('America/Caracas')))
     notes = db.Column(db.String(200))
-    
-    # Campos para entradas
-    boxes = db.Column(db.Float)  # Cantidad de cajas (para entradas)
-    units_per_box = db.Column(db.Integer)  # Unidades por caja
-    purchase_price = db.Column(db.Float)  # Precio total de compra
-    currency = db.Column(db.String(3))  # 'USD' o 'BS'
+    boxes = db.Column(db.Float)
+    units_per_box = db.Column(db.Integer)
+    purchase_price = db.Column(db.Float)
+    currency = db.Column(db.String(3))
     distributor = db.Column(db.String(50))
-    
-    # Campos para salidas
-    exit_type = db.Column(db.String(20))  # 'individual', 'caja', etc.
-    
-    # Relaciones
+    exit_type = db.Column(db.String(20))
     product = db.relationship('Product', backref='movements')
     user = db.relationship('User', backref='inventory_actions')
-
     is_locked = db.Column(db.Boolean, default=False)
     locked_by_admin = db.Column(db.Boolean, default=False)
-    total_usd_investment = db.Column(db.Float)  # Inversión total en USD
-
+    total_usd_investment = db.Column(db.Float)
 
 class PaymentMethod(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False)
-    currency = db.Column(db.String(3), nullable=False)  # 'USD' o 'BS'
+    currency = db.Column(db.String(3), nullable=False)
     is_active = db.Column(db.Boolean, default=True)
 
 def create_initial_products():
-
-    from py_exchange import get_current_rate  # Importamos aquí para evitar circularidad
+    from py_exchange import get_current_rate
     current_rate = get_current_rate()
     
-    products = [
-        # Cervezas (existente)
+    # Primero creamos todos los productos individuales
+    individual_products = [
+        # Cervezas
         {
             'name': 'Solera Azul',
             'brand': 'Polar',
             'category': 'Cerveza',
             'presentation': 'Botella 222ml',
-            'price_usd': 1.0,  # Asegúrate de incluir price_usd en todos los productos
+            'price_usd': 1.0,
             'price_unit_usd': 1.0,
             'price_half_tobo_usd': 5.0,
             'price_tobo_usd': 10.0,
@@ -144,29 +133,101 @@ def create_initial_products():
         },
         # Rones
         {
-            'name': 'Cacique 500',
-            'brand': 'Cacique',
+            'name': 'Superior',
+            'brand': 'Polar',
             'category': 'Ron',
-            'presentation': 'Botella 500ml',
-            'price_usd': 3.0,  # Añadido price_usd
-            'price_unit_usd': 3.0,
-            'price_half_tobo_usd': 15.0,  # 6 unidades
-            'price_tobo_usd': 30.0,        # 12 unidades (2 cajas)
-            'price_unit_bs': 3.0 * current_rate,
-            'price_half_tobo_bs': 15.0 * current_rate,
-            'price_tobo_bs': 30.0 * current_rate,
-            'cost_per_unit_usd': 15.0/6    # $15 por caja de 6
+            'presentation': 'Botella 1L',
+            'price_usd': 3.58,
+            'price_unit_usd': 3.58,
+            'price_unit_bs': 3.58 * current_rate,
+            'cost_per_unit_usd': 2.5
+        },
+        {
+            'name': 'Carta Roja',
+            'brand': 'Polar',
+            'category': 'Ron',
+            'presentation': 'Botella 1L',
+            'price_usd': 4.33,
+            'price_unit_usd': 4.33,
+            'price_unit_bs': 4.33 * current_rate,
+            'cost_per_unit_usd': 3.0
+        },
+        {
+            'name': 'Santa Teresa',
+            'brand': 'Santa Teresa',
+            'category': 'Ron',
+            'presentation': 'Botella 750ml',
+            'price_usd': 8.0,
+            'price_unit_usd': 8.0,
+            'price_unit_bs': 8.0 * current_rate,
+            'cost_per_unit_usd': 5.0
         },
         # Anís
         {
-            'name': 'Anís Cartujo',
+            'name': 'Cartujo',
             'brand': 'Cartujo',
             'category': 'Anís',
-            'presentation': 'Botella 750ml',
-            'price_usd': 4.0,  # Añadido price_usd
-            'price_unit_usd': 4.0,
-            'price_unit_bs': 4.0 * current_rate,
-            'cost_per_unit_usd': 2.5
+            'presentation': 'Botella 1L',
+            'price_usd': 5.41,
+            'price_unit_usd': 5.41,
+            'price_unit_bs': 5.41 * current_rate,
+            'cost_per_unit_usd': 3.5
+        },
+        # Misceláneos
+        {
+            'name': 'Soda',
+            'brand': 'Polar',
+            'category': 'Misceláneo',
+            'presentation': 'Botella 355ml',
+            'price_usd': 0.53,
+            'price_unit_usd': 0.53,
+            'price_unit_bs': 0.53 * current_rate,
+            'cost_per_unit_usd': 0.3,
+            'is_alcoholic': False
+        },
+        {
+            'name': 'Coca Cola',
+            'brand': 'Coca Cola',
+            'category': 'Misceláneo',
+            'presentation': 'Botella 1L',
+            'price_usd': 1.1,
+            'price_unit_usd': 1.1,
+            'price_unit_bs': 1.1 * current_rate,
+            'cost_per_unit_usd': 0.7,
+            'is_alcoholic': False
+        },
+        {
+            'name': 'Agua 1.5L',
+            'brand': 'Minalba',
+            'category': 'Misceláneo',
+            'presentation': 'Botella 1.5L',
+            'price_usd': 0.38,
+            'price_unit_usd': 0.38,
+            'price_unit_bs': 0.38 * current_rate,
+            'cost_per_unit_usd': 0.2,
+            'is_alcoholic': False
+        },
+        {
+            'name': 'Agua 400ml',
+            'brand': 'Minalba',
+            'category': 'Misceláneo',
+            'presentation': 'Botella 400ml',
+            'price_usd': 0.15,
+            'price_unit_usd': 0.15,
+            'price_unit_bs': 0.15 * current_rate,
+            'cost_per_unit_usd': 0.08,
+            'is_alcoholic': False
+        },
+        {
+            'name': 'Gatorade',
+            'brand': 'Gatorade',
+            'category': 'Misceláneo',
+            'presentation': 'Botella 500ml',
+            'price_usd': 0.75,
+            'price_unit_usd': 0.75,
+            'price_unit_bs': 0.75 * current_rate,
+            'cost_per_unit_usd': 0.45,
+            'is_alcoholic': False
         },
         # Whisky
         {
@@ -174,19 +235,16 @@ def create_initial_products():
             'brand': 'Johnnie Walker',
             'category': 'Whisky',
             'presentation': 'Botella 750ml',
-            'price_usd': 8.0,  # Añadido price_usd
+            'price_usd': 8.0,
             'price_unit_usd': 8.0,
             'price_unit_bs': 8.0 * current_rate,
             'cost_per_unit_usd': 5.0
         }
     ]
-    
-    for prod_data in products:
+
+    # Crear productos individuales primero
+    for prod_data in individual_products:
         if not Product.query.filter_by(name=prod_data['name'], brand=prod_data['brand']).first():
-            # Asegurémonos de que price_usd esté definido
-            if 'price_usd' not in prod_data:
-                prod_data['price_usd'] = prod_data.get('price_unit_usd', 0)
-                
             product = Product(
                 name=prod_data['name'],
                 brand=prod_data['brand'],
@@ -196,7 +254,6 @@ def create_initial_products():
                 box_quantity=0,
                 price_usd=prod_data['price_usd'],
                 price_bs=prod_data.get('price_unit_bs', prod_data['price_usd'] * current_rate),
-                # Precios especiales
                 price_unit_usd=prod_data.get('price_unit_usd', prod_data['price_usd']),
                 price_half_tobo_usd=prod_data.get('price_half_tobo_usd', 0),
                 price_tobo_usd=prod_data.get('price_tobo_usd', 0),
@@ -207,9 +264,91 @@ def create_initial_products():
                 price_tobo_bs=prod_data.get('price_tobo_bs', 0),
                 price_half_box_bs=prod_data.get('price_half_box_bs', 0),
                 price_box_bs=prod_data.get('price_box_bs', 0),
-                is_alcoholic=True,
+                is_alcoholic=prod_data.get('is_alcoholic', True),
                 cost_per_unit_usd=prod_data.get('cost_per_unit_usd', prod_data['price_usd']*0.7)
             )
             db.session.add(product)
+    
+    db.session.commit()
+
+    # Ahora creamos los combos, buscando los productos por nombre exacto
+    combos = [
+        {
+            'name': 'Superior + Coca Cola',
+            'brand': 'Combo',
+            'category': 'Combo',
+            'presentation': '1L Ron + 1L Refresco',
+            'price_usd': 20.0,
+            'is_combo': True,
+            'combo_items': [
+                {'product_id': Product.query.filter_by(name='Superior').first().id, 'quantity': 1},
+                {'product_id': Product.query.filter_by(name='Coca Cola').first().id, 'quantity': 1}
+            ],
+            'is_alcoholic': True
+        },
+        {
+            'name': 'Carta Roja + Coca Cola',
+            'brand': 'Combo',
+            'category': 'Combo',
+            'presentation': '1L Ron + 1L Refresco',
+            'price_usd': 20.0,
+            'is_combo': True,
+            'combo_items': [
+                {'product_id': Product.query.filter_by(name='Carta Roja').first().id, 'quantity': 1},
+                {'product_id': Product.query.filter_by(name='Coca Cola').first().id, 'quantity': 1}
+            ],
+            'is_alcoholic': True
+        },
+        {
+            'name': 'Santa Teresa + Coca Cola',
+            'brand': 'Combo',
+            'category': 'Combo',
+            'presentation': '750ml Ron + 1L Refresco',
+            'price_usd': 25.0,
+            'is_combo': True,
+            'combo_items': [
+                {'product_id': Product.query.filter_by(name='Santa Teresa').first().id, 'quantity': 1},
+                {'product_id': Product.query.filter_by(name='Coca Cola').first().id, 'quantity': 1}
+            ],
+            'is_alcoholic': True
+        },
+        {
+            'name': 'Cartujo + Gatorade',
+            'brand': 'Combo',
+            'category': 'Combo',
+            'presentation': '1L Anís + 500ml Gatorade',
+            'price_usd': 20.0,
+            'is_combo': True,
+            'combo_items': [
+                {'product_id': Product.query.filter_by(name='Cartujo').first().id, 'quantity': 1},
+                {'product_id': Product.query.filter_by(name='Gatorade').first().id, 'quantity': 1}
+            ],
+            'is_alcoholic': True
+        }
+    ]
+
+    for combo_data in combos:
+        if not Product.query.filter_by(name=combo_data['name']).first():
+            # Verificar que todos los productos del combo existan
+            valid_combo = True
+            for item in combo_data['combo_items']:
+                if not Product.query.get(item['product_id']):
+                    valid_combo = False
+                    break
+            
+            if valid_combo:
+                combo = Product(
+                    name=combo_data['name'],
+                    brand=combo_data['brand'],
+                    category=combo_data['category'],
+                    presentation=combo_data['presentation'],
+                    price_usd=combo_data['price_usd'],
+                    price_bs=combo_data['price_usd'] * current_rate,
+                    is_combo=True,
+                    combo_items=combo_data['combo_items'],
+                    is_alcoholic=combo_data.get('is_alcoholic', True),
+                    quantity=0
+                )
+                db.session.add(combo)
     
     db.session.commit()

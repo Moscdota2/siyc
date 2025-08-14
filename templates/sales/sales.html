@@ -46,24 +46,44 @@
                 </div>
             </div>
             
-             <div class="product-selection">
+            <div class="product-selection">
                 <h3>Productos</h3>
                 <div id="product_items">
                     <div class="product-item">
                         <select name="product_id[]" class="form-control product-select" required>
                             <option value="">Seleccione un producto</option>
-                            {% for product in products if product.quantity > 0 %}
+                            
+                            <!-- Productos individuales -->
+                            <optgroup label="Productos Individuales">
+                                {% for product in products if not product.is_combo %}
                                 <option value="{{ product.id }}" 
                                         data-price="{{ product.price_usd }}"
-                                        data-price-unit="{{ product.price_unit_usd }}"
-                                        data-price-half-tobo="{{ product.price_half_tobo_usd }}"
-                                        data-price-tobo="{{ product.price_tobo_usd }}"
-                                        data-price-half-box="{{ product.price_half_box_usd }}"
-                                        data-price-box="{{ product.price_box_usd }}"
+                                        data-is-combo="false"
                                         data-stock="{{ product.quantity }}">
                                     {{ product.name }} (${{ "%.2f"|format(product.price_usd) }}) - Stock: {{ product.quantity }}
                                 </option>
-                            {% endfor %}
+                                {% endfor %}
+                            </optgroup>
+                            
+                            <!-- Combos disponibles -->
+                            <optgroup label="Servicios (Combos)">
+                                {% for product in products if product.is_combo and product.available_quantity > 0 %}
+                                <option value="{{ product.id }}" 
+                                        data-price="{{ product.price_usd }}"
+                                        data-is-combo="true"
+                                        data-stock="{{ product.available_quantity }}">
+                                    {{ product.name }} (${{ "%.2f"|format(product.price_usd) }})
+                                    - Disponibles: {{ product.available_quantity }}
+                                    {% if product.combo_items %}
+                                        (Incluye: 
+                                        {% for item in product.combo_items %}
+                                            {% set item_product = products|selectattr("id", "equalto", item.product_id)|first %}
+                                            {{ item.quantity }}x {{ item_product.name if item_product else '???' }}{% if not loop.last %}, {% endif %}
+                                        {% endfor %})
+                                    {% endif %}
+                                </option>
+                                {% endfor %}
+                            </optgroup>
                         </select>
                         
                         <select name="exit_type[]" class="form-control exit-type-select">
@@ -152,6 +172,22 @@ document.addEventListener('DOMContentLoaded', function() {
         calculateTotal();
     });
 
+    // Actualizar la interfaz cuando se selecciona un combo
+    document.addEventListener('change', function(e) {
+        if (e.target.classList.contains('product-select')) {
+            const selectedOption = e.target.selectedOptions[0];
+            const isCombo = selectedOption && selectedOption.dataset.isCombo === 'true';
+            const exitTypeSelect = e.target.closest('.product-item').querySelector('.exit-type-select');
+            
+            if (exitTypeSelect) {
+                exitTypeSelect.disabled = isCombo;
+                if (isCombo) {
+                    exitTypeSelect.value = 'individual';
+                }
+            }
+        }
+    });
+
     // Función para agregar event listeners a un producto
     function addProductEventListeners(productItem) {
         const exitTypeSelect = productItem.querySelector('.exit-type-select');
@@ -221,44 +257,43 @@ document.addEventListener('DOMContentLoaded', function() {
             const exitTypeSelect = item.querySelector('.exit-type-select');
             const quantityInput = item.querySelector('.quantity-input');
             
-            if (select && select.selectedOptions[0] && quantityInput && exitTypeSelect) {
-                const exitType = exitTypeSelect.value;
+            if (select && select.selectedOptions[0] && quantityInput) {
+                const isCombo = select.selectedOptions[0].dataset.isCombo === 'true';
+                const price = parseFloat(select.selectedOptions[0].dataset.price);
                 const quantity = parseInt(quantityInput.value) || 0;
-                const productData = select.selectedOptions[0].dataset;
                 
-                let subtotal = 0;
-                
-                if (exitType === 'individual') {
-                    // Calcular agrupamientos automáticos
-                    const tobos = Math.floor(quantity / 12);
-                    const remaining = quantity % 12;
-                    const halfTobos = Math.floor(remaining / 6);
-                    const units = remaining % 6;
-                    
-                    subtotal = (tobos * parseFloat(productData.priceTobo)) + 
-                               (halfTobos * parseFloat(productData.priceHalfTobo)) + 
-                               (units * parseFloat(productData.priceUnit));
+                if (isCombo) {
+                    // Los combos siempre usan el precio fijo multiplicado por la cantidad
+                    total += price * quantity;
                 } else {
-                    // Usar precio según tipo seleccionado
-                    switch(exitType) {
-                        case 'half_tobo':
-                            subtotal = parseFloat(productData.priceHalfTobo);
-                            break;
-                        case 'tobo':
-                            subtotal = parseFloat(productData.priceTobo);
-                            break;
-                        case 'half_box':
-                            subtotal = parseFloat(productData.priceHalfBox);
-                            break;
-                        case 'box':
-                            subtotal = parseFloat(productData.priceBox);
-                            break;
-                        default:
-                            subtotal = quantity * parseFloat(productData.priceUnit);
+                    // Lógica existente para productos individuales
+                    const exitType = exitTypeSelect.value;
+                    if (exitType === 'individual') {
+                        const tobos = Math.floor(quantity / 12);
+                        const remaining = quantity % 12;
+                        const halfTobos = Math.floor(remaining / 6);
+                        const units = remaining % 6;
+                        
+                        total += (tobos * parseFloat(select.selectedOptions[0].dataset.priceTobo)) + 
+                                (halfTobos * parseFloat(select.selectedOptions[0].dataset.priceHalfTobo)) + 
+                                (units * parseFloat(select.selectedOptions[0].dataset.priceUnit));
+                    } else {
+                        switch(exitType) {
+                            case 'half_tobo':
+                                total += parseFloat(select.selectedOptions[0].dataset.priceHalfTobo);
+                                break;
+                            case 'tobo':
+                                total += parseFloat(select.selectedOptions[0].dataset.priceTobo);
+                                break;
+                            case 'half_box':
+                                total += parseFloat(select.selectedOptions[0].dataset.priceHalfBox);
+                                break;
+                            case 'box':
+                                total += parseFloat(select.selectedOptions[0].dataset.priceBox);
+                                break;
+                        }
                     }
                 }
-                
-                total += subtotal;
             }
         });
         
@@ -422,6 +457,14 @@ document.addEventListener('DOMContentLoaded', function() {
     padding: 20px;
     border-radius: 5px;
     border: 1px solid #ddd;
+}
+
+.combo-details {
+    margin-top: 5px;
+    padding-left: 15px;
+    border-left: 2px solid #ddd;
+    font-size: 0.9em;
+    color: #666;
 }
 </style>
 {% endblock %}
