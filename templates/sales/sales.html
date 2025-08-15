@@ -7,12 +7,12 @@
     <h1>Registrar Consumo</h1>
     
     <div class="sales-nav">
-        <a href="{{ url_for('sales') }}" class="active">Consumo Directo</a>
-        <a href="{{ url_for('view_tables') }}">Ordenes de Mesas</a>
-        <a href="{{ url_for('bar_orders') }}" class="nav-link">Ordenes de Barra (Usuarios)</a>
+        <a href="{{ url_for('sales') }}">Consumo Directo</a>
+        <a href="{{ url_for('view_tables') }}" class="{% if not is_bar_order %}active{% endif %}">Ordenes de Mesas</a>
+        <a href="{{ url_for('bar_orders') }}">Ordenes de Barra (Usuarios)</a>
         <a href="{{ url_for('inventory_history') }}">Historico de Movimientos</a>
         <a href="{{ url_for('sales_reports') }}">Reportes de Venta</a>
-        
+        <a href="{{ url_for('manage_exchange_rate') }}">Tasa Bolivares</a>
     </div>
     
     <div class="sales-content">

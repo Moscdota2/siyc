@@ -110,26 +110,69 @@ def create_initial_products():
     from py_exchange import get_current_rate
     current_rate = get_current_rate()
     
+    # Definimos la estructura de precios estándar para cervezas
+    beer_pricing = {
+        'price_unit_usd': 1.0,
+        'price_half_tobo_usd': 5.0,    # 6 unidades
+        'price_tobo_usd': 10.0,        # 12 unidades
+        'price_half_box_usd': 15.0,    # 18 unidades
+        'price_box_usd': 30.0,         # 36 unidades
+        'price_unit_bs': 1.0 * current_rate * 1.2,
+        'price_half_tobo_bs': 5.0 * current_rate * 1.2,
+        'price_tobo_bs': 10.0 * current_rate * 1.2,
+        'price_half_box_bs': 15.0 * current_rate * 1.2,
+        'price_box_bs': 30.0 * current_rate * 1.2,
+    }
+
     # Primero creamos todos los productos individuales
     individual_products = [
-        # Cervezas
+        # Cervezas (todas con la misma estructura de precios)
         {
             'name': 'Solera Azul',
             'brand': 'Polar',
             'category': 'Cerveza',
             'presentation': 'Botella 222ml',
             'price_usd': 1.0,
-            'price_unit_usd': 1.0,
-            'price_half_tobo_usd': 5.0,
-            'price_tobo_usd': 10.0,
-            'price_half_box_usd': 12.5,
-            'price_box_usd': 25.0,
-            'price_unit_bs': 1.0 * current_rate * 1.2,
-            'price_half_tobo_bs': 5.0 * current_rate * 1.2,
-            'price_tobo_bs': 10.0 * current_rate * 1.2,
-            'price_half_box_bs': 15.0,
-            'price_box_bs': 30.0,
-            'cost_per_unit_usd': 17.0/36
+            'cost_per_unit_usd': 17.0/36,
+            **beer_pricing
+        },
+        {
+            'name': 'Polarcita Negra',
+            'brand': 'Polar',
+            'category': 'Cerveza',
+            'presentation': 'Botella 222ml',
+            'price_usd': 1.0,
+            'cost_per_unit_usd': 17.0/36,
+            **beer_pricing
+        },
+        {
+            'name': 'Polar Light',
+            'brand': 'Polar',
+            'category': 'Cerveza',
+            'presentation': 'Lata 350ml',
+            'price_usd': 1.0,
+            'cost_per_unit_usd': 17.0/36,
+            **beer_pricing
+        },
+        {
+            'name': 'Zulia Lager',
+            'brand': 'Zulia',
+            'category': 'Cerveza',
+            'presentation': 'Botella 330ml',
+            'price_usd': 1.0,
+            'cost_per_unit_usd': 19.0/36,
+            **beer_pricing
+        },
+        # Resto de tus productos individuales (rones, anís, etc.)
+        {
+            'name': 'Superior',
+            'brand': 'Polar',
+            'category': 'Ron',
+            'presentation': 'Botella 1L',
+            'price_usd': 3.58,
+            'price_unit_usd': 3.58,
+            'price_unit_bs': 3.58 * current_rate,
+            'cost_per_unit_usd': 2.5
         },
         # Rones
         {
@@ -352,3 +395,17 @@ def create_initial_products():
                 db.session.add(combo)
     
     db.session.commit()
+
+
+def calcular_precio_cervezas(total_cervezas, referencia_producto):
+    """ Calcula el precio óptimo de cervezas mezclando marcas """
+    tobos = total_cervezas // 12
+    remaining = total_cervezas % 12
+    half_tobos = remaining // 6
+    units = remaining % 6
+
+    subtotal = (tobos * referencia_producto.price_tobo_usd) + \
+               (half_tobos * referencia_producto.price_half_tobo_usd) + \
+               (units * referencia_producto.price_unit_usd)
+
+    return subtotal

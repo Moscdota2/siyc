@@ -9,6 +9,14 @@
 {% endblock %}
 
 {% block content %}
+<div class="sales-nav">
+    <a href="{{ url_for('sales') }}">Consumo Directo</a>
+    <a href="{{ url_for('view_tables') }}" class="{% if not is_bar_order %}active{% endif %}">Ordenes de Mesas</a>
+    <a href="{{ url_for('bar_orders') }}">Ordenes de Barra (Usuarios)</a>
+    <a href="{{ url_for('inventory_history') }}">Historico de Movimientos</a>
+    <a href="{{ url_for('sales_reports') }}">Reportes de Venta</a>
+    <a href="{{ url_for('manage_exchange_rate') }}">Tasa Bolivares</a>
+</div>
 <div class="order-container">
     <h1>
         {% if is_bar_order %}
@@ -60,7 +68,23 @@
                     </td>
                     <td>{{ item.quantity }}</td>
                     <td>{{ 'COMBO' if item.product.is_combo else item.exit_type|upper }}</td>
-                    <td>${{ "%.2f"|format(item.subtotal/item.quantity) }}</td>
+                    <td>
+                        {% if item.product.category == 'Cerveza' and item.exit_type == 'individual' %}
+                            {% if item.quantity >= 36 %}
+                                ${{ "%.2f"|format(item.product.price_box_usd / item.quantity) }}
+                            {% elif item.quantity >= 18 %}
+                                ${{ "%.2f"|format(item.product.price_half_box_usd / item.quantity) }}
+                            {% elif item.quantity >= 12 %}
+                                ${{ "%.2f"|format(item.product.price_tobo_usd / item.quantity) }}
+                            {% elif item.quantity >= 6 %}
+                                ${{ "%.2f"|format(item.product.price_half_tobo_usd / item.quantity) }}
+                            {% else %}
+                                ${{ "%.2f"|format(item.subtotal/item.quantity) }}
+                            {% endif %}
+                        {% else %}
+                            ${{ "%.2f"|format(item.subtotal/item.quantity) }}
+                        {% endif %}
+                    </td>
                     <td>${{ "%.2f"|format(item.subtotal) }}</td>
                 </tr>
                 {% endfor %}
@@ -92,6 +116,7 @@
                                     data-price-half-box="{{ product.price_half_box_usd }}"
                                     data-price-box="{{ product.price_box_usd }}"
                                     data-is-combo="false"
+                                    data-category="{{ product.category }}"
                                     data-stock="{{ product.quantity }}">
                                 {{ product.name }} (${{ "%.2f"|format(product.price_usd) }}) - Stock: {{ product.quantity }}
                             </option>
@@ -247,40 +272,67 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Actualizar cantidad según tipo de salida seleccionado
     exitTypeSelector.addEventListener('change', function() {
-        switch(this.value) {
-            case 'individual':
-                quantityInput.value = 1;
-                quantityInput.min = 1;
-                break;
-            case 'half_tobo':
-                quantityInput.value = 6;
-                quantityInput.min = 6;
-                break;
-            case 'tobo':
-                quantityInput.value = 12;
-                quantityInput.min = 12;
-                break;
-            case 'half_box':
-                quantityInput.value = 18;
-                quantityInput.min = 18;
-                break;
-            case 'box':
-                quantityInput.value = 36;
-                quantityInput.min = 36;
-                break;
+        const selectedOption = productSelect.selectedOptions[0];
+        const isBeer = selectedOption && selectedOption.dataset.category === 'Cerveza';
+        
+        if (isBeer) {
+            switch(this.value) {
+                case 'individual':
+                    quantityInput.value = 1;
+                    quantityInput.min = 1;
+                    quantityInput.readOnly = false;
+                    break;
+                case 'half_tobo':
+                    quantityInput.value = 6;
+                    quantityInput.min = 6;
+                    quantityInput.readOnly = true;
+                    break;
+                case 'tobo':
+                    quantityInput.value = 12;
+                    quantityInput.min = 12;
+                    quantityInput.readOnly = true;
+                    break;
+                case 'half_box':
+                    quantityInput.value = 18;
+                    quantityInput.min = 18;
+                    quantityInput.readOnly = true;
+                    break;
+                case 'box':
+                    quantityInput.value = 36;
+                    quantityInput.min = 36;
+                    quantityInput.readOnly = true;
+                    break;
+            }
+        } else {
+            quantityInput.value = 1;
+            quantityInput.min = 1;
+            quantityInput.readOnly = false;
         }
     });
     
-    // Si el usuario modifica manualmente la cantidad, determinar el tipo más cercano
+    // Si el usuario modifica manualmente la cantidad, solo permitir si es individual
     quantityInput.addEventListener('change', function() {
-        const qty = parseInt(this.value);
-        if (qty % 6 === 0 && qty <= 36) {
-            if (qty === 6) exitTypeSelector.value = 'half_tobo';
-            else if (qty === 12) exitTypeSelector.value = 'tobo';
-            else if (qty === 18) exitTypeSelector.value = 'half_box';
-            else if (qty === 36) exitTypeSelector.value = 'box';
-        } else {
-            exitTypeSelector.value = 'individual';
+        if (exitTypeSelector.value !== 'individual') {
+            const qty = parseInt(this.value);
+            const selectedOption = productSelect.selectedOptions[0];
+            const isBeer = selectedOption && selectedOption.dataset.category === 'Cerveza';
+            
+            if (isBeer) {
+                switch(exitTypeSelector.value) {
+                    case 'half_tobo':
+                        this.value = 6;
+                        break;
+                    case 'tobo':
+                        this.value = 12;
+                        break;
+                    case 'half_box':
+                        this.value = 18;
+                        break;
+                    case 'box':
+                        this.value = 36;
+                        break;
+                }
+            }
         }
     });
     
@@ -292,8 +344,31 @@ document.addEventListener('DOMContentLoaded', function() {
         exitTypeSelector.disabled = isCombo;
         if (isCombo) {
             exitTypeSelector.value = 'individual';
+            quantityInput.min = 1;
+            quantityInput.value = 1;
+            quantityInput.readOnly = false;
+        } else {
+            // Restaurar valores según tipo de producto
+            if (selectedOption && selectedOption.dataset.category === 'Cerveza') {
+                exitTypeSelector.disabled = false;
+                quantityInput.min = 1;
+                quantityInput.readOnly = exitTypeSelector.value !== 'individual';
+            } else {
+                exitTypeSelector.value = 'individual';
+                quantityInput.min = 1;
+                quantityInput.readOnly = false;
+            }
         }
     });
+    
+    // Inicializar el estado del selector de tipo de salida
+    if (productSelect.selectedOptions[0]?.dataset.isCombo === 'true') {
+        exitTypeSelector.disabled = true;
+        exitTypeSelector.value = 'individual';
+        quantityInput.readOnly = false;
+    } else if (productSelect.selectedOptions[0]?.dataset.category === 'Cerveza') {
+        quantityInput.readOnly = exitTypeSelector.value !== 'individual';
+    }
 });
 </script>
 {% endblock %}
