@@ -7,9 +7,23 @@
 {% endblock %}
 
 {% block content %}
+<div class="inventory-nav">
+    <a href="{{ url_for('inventory_entry') }}" class="{{ 'active' if request.endpoint == 'inventory_entry' }}">Entrada
+        Mercancía</a>
+    <a href="{{ url_for('inventory_history') }}"
+        class="{{ 'active' if request.endpoint == 'inventory_history' }}">Histórico Movimientos</a>
+    {% if current_user.role == 'admin' %}
+    <a href="{{ url_for('inventory') }}" class="{{ 'active' if request.endpoint == 'inventory' }}">Inventario Real</a>
+    <a href="{{ url_for('create_product') }}" class="{{ 'active' if request.endpoint == 'create_product' }}">Agregar
+        Producto</a>
+    {% endif %}
+</div>
+
 <div class="inventory-container">
-    <h1 class="inventory-title"><i class="fas fa-warehouse"></i> Registro de Inventario</h1>
-    
+    <h1 class="inventory-title">
+        <i class="fas fa-truck-loading"></i> Registro de Entrada de Mercancía
+    </h1>
+
     <div class="inventory-grid">
         <!-- Tarjeta Cervezas -->
         <div class="inventory-card beer-card">
@@ -18,27 +32,27 @@
                 <h2>Cervezas</h2>
                 <span class="badge">36 und/caja</span>
             </div>
-            
+
             <form method="POST" class="inventory-form">
                 <input type="hidden" name="product_type" value="cerveza">
-                
+
                 <div class="form-group animated-input">
                     <select name="product_id" class="form-control" required>
-                        <option value="" disabled selected></option>
-                        {% for product in products %}
+                        <option value="" disabled selected>Selecciona una cerveza</option>
+                        {% for product in products if product.category == 'Cerveza' %}
                         <option value="{{ product.id }}">{{ product.brand }} {{ product.name }}</option>
                         {% endfor %}
                     </select>
                     <label class="input-label">Producto</label>
                 </div>
-                
+
                 <div class="form-row">
                     <div class="form-group animated-input">
                         <input type="number" name="boxes" step="0.5" min="0.5" class="form-control" required>
                         <label class="input-label">Cantidad (cajas)</label>
                         <span class="input-hint">0.5 = 18 unidades</span>
                     </div>
-                    
+
                     <div class="form-group">
                         <div class="currency-toggle">
                             <button type="button" class="currency-btn active" data-currency="usd">USD</button>
@@ -47,50 +61,52 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="form-group animated-input">
                     <input type="number" name="purchase_price" step="0.01" min="0" class="form-control" required>
                     <label class="input-label">Precio total</label>
                     <span class="currency-symbol">$</span>
                 </div>
-                
+
                 <div class="form-group distributor-group">
                     <label>Distribuidor:</label>
                     <div class="distributor-buttons">
                         <label class="distributor-btn">
                             <input type="radio" name="distributor" value="polar" checked>
                             <span class="btn-content">
-                                <img src="{{ url_for('static', filename='images/polar.png') }}" alt="Polar" class="distributor-icon">
+                                <img src="{{ url_for('static', filename='images/polar.png') }}" alt="Polar"
+                                    class="distributor-icon">
                                 Polar
                             </span>
                         </label>
                         <label class="distributor-btn">
                             <input type="radio" name="distributor" value="regional">
                             <span class="btn-content">
-                                <img src="{{ url_for('static', filename='images/regional.png') }}" alt="Regional" class="distributor-icon">
+                                <img src="{{ url_for('static', filename='images/regional.png') }}" alt="Regional"
+                                    class="distributor-icon">
                                 Regional
                             </span>
                         </label>
                     </div>
                 </div>
-                
+
                 <button type="submit" class="submit-btn beer-btn">
                     <i class="fas fa-save"></i> Registrar Cervezas
                 </button>
             </form>
         </div>
-        
+
         <!-- Tarjeta Rones - Modificada para registro por botella -->
         <div class="inventory-card rum-card">
             <div class="card-header">
                 <i class="fas fa-glass-whiskey"></i>
                 <h2>Rones</h2>
-                <span class="badge">1 und/botella</span>  <!-- Cambiado de 6 und/caja a 1 und/botella -->
+                <span class="badge">1 und/botella</span> <!-- Cambiado de 6 und/caja a 1 und/botella -->
             </div>
-            
+
             <form method="POST" class="inventory-form">
                 <input type="hidden" name="product_type" value="ron">
-                
+
                 <div class="form-group animated-input">
                     <select name="product_id" class="form-control" required>
                         <option value="" disabled selected>Selecciona un ron</option>
@@ -100,13 +116,13 @@
                     </select>
                     <label class="input-label">Producto</label>
                 </div>
-                
+
                 <div class="form-row">
                     <div class="form-group animated-input">
                         <input type="number" name="boxes" step="1" min="1" class="form-control" required>
-                        <label class="input-label">Cantidad (botellas)</label>  <!-- Cambiado de "cajas" a "botellas" -->
+                        <label class="input-label">Cantidad (botellas)</label> <!-- Cambiado de "cajas" a "botellas" -->
                     </div>
-                    
+
                     <div class="form-group">
                         <div class="currency-toggle">
                             <button type="button" class="currency-btn active" data-currency="usd">USD</button>
@@ -115,15 +131,15 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="form-group animated-input">
                     <input type="number" name="purchase_price" step="0.01" min="0" class="form-control" required>
                     <label class="input-label">Precio total</label>
                     <span class="currency-symbol">$</span>
                 </div>
-                
+
                 <!-- Eliminado el selector de distribuidor para rones -->
-                
+
                 <button type="submit" class="submit-btn rum-btn">
                     <i class="fas fa-save"></i> Registrar Rones
                 </button>
@@ -131,188 +147,186 @@
         </div>
 
         <div class="inventory-card anis-card">
-        <div class="card-header">
-            <i class="fas fa-wine-bottle"></i>
-            <h2>Anís</h2>
-            <span class="badge">1 und/botella</span>
-        </div>
-        
-        <form method="POST" class="inventory-form">
-            <input type="hidden" name="product_type" value="anis">
-            
-            <div class="form-group animated-input">
-                <select name="product_id" class="form-control" required>
-                    <option value="" disabled selected>Selecciona un anís</option>
-                    {% for product in products if product.category == 'Anís' %}
-                    <option value="{{ product.id }}">{{ product.brand }} {{ product.name }}</option>
-                    {% endfor %}
-                </select>
-                <label class="input-label">Producto</label>
+            <div class="card-header">
+                <i class="fas fa-wine-bottle"></i>
+                <h2>Anís</h2>
+                <span class="badge">1 und/botella</span>
             </div>
-            
-            <div class="form-row">
+
+            <form method="POST" class="inventory-form">
+                <input type="hidden" name="product_type" value="anis">
+
                 <div class="form-group animated-input">
-                    <input type="number" name="boxes" step="1" min="1" class="form-control" required>
-                    <label class="input-label">Cantidad (botellas)</label>
+                    <select name="product_id" class="form-control" required>
+                        <option value="" disabled selected>Selecciona un anís</option>
+                        {% for product in products if product.category == 'Anís' %}
+                        <option value="{{ product.id }}">{{ product.brand }} {{ product.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <label class="input-label">Producto</label>
                 </div>
-                
-                <div class="form-group">
-                    <div class="currency-toggle">
-                        <button type="button" class="currency-btn active" data-currency="usd">USD</button>
-                        <button type="button" class="currency-btn" data-currency="bs">BS</button>
-                        <input type="hidden" name="currency" value="usd">
+
+                <div class="form-row">
+                    <div class="form-group animated-input">
+                        <input type="number" name="boxes" step="1" min="1" class="form-control" required>
+                        <label class="input-label">Cantidad (botellas)</label>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="currency-toggle">
+                            <button type="button" class="currency-btn active" data-currency="usd">USD</button>
+                            <button type="button" class="currency-btn" data-currency="bs">BS</button>
+                            <input type="hidden" name="currency" value="usd">
+                        </div>
                     </div>
                 </div>
-            </div>
-            
-            <div class="form-group animated-input">
-                <input type="number" name="purchase_price" step="0.01" min="0" class="form-control" required>
-                <label class="input-label">Precio total</label>
-                <span class="currency-symbol">$</span>
-            </div>
-            
-            <button type="submit" class="submit-btn anis-btn">
-                <i class="fas fa-save"></i> Registrar Anís
-            </button>
-        </form>
-    
-    
-    
-    
-    
-    
+
+                <div class="form-group animated-input">
+                    <input type="number" name="purchase_price" step="0.01" min="0" class="form-control" required>
+                    <label class="input-label">Precio total</label>
+                    <span class="currency-symbol">$</span>
+                </div>
+
+                <button type="submit" class="submit-btn anis-btn">
+                    <i class="fas fa-save"></i> Registrar Anís
+                </button>
+            </form>
+
+
+
+
+
+
         </div>
         <div class="inventory-card whisky-card">
-        <div class="card-header">
-            <i class="fas fa-whiskey-glass"></i>
-            <h2>Whisky</h2>
-            <span class="badge">1 und/botella</span>
-        </div>
-        
-        <form method="POST" class="inventory-form">
-            <input type="hidden" name="product_type" value="whisky">
-            
-            <div class="form-group animated-input">
-                <select name="product_id" class="form-control" required>
-                    <option value="" disabled selected>Selecciona un whisky</option>
-                    {% for product in products if product.category == 'Whisky' %}
-                    <option value="{{ product.id }}">{{ product.brand }} {{ product.name }}</option>
-                    {% endfor %}
-                </select>
-                <label class="input-label">Producto</label>
+            <div class="card-header">
+                <i class="fas fa-whiskey-glass"></i>
+                <h2>Whisky</h2>
+                <span class="badge">1 und/botella</span>
             </div>
-            
-            <div class="form-row">
+
+            <form method="POST" class="inventory-form">
+                <input type="hidden" name="product_type" value="whisky">
+
                 <div class="form-group animated-input">
-                    <input type="number" name="boxes" step="1" min="1" class="form-control" required>
-                    <label class="input-label">Cantidad (botellas)</label>
+                    <select name="product_id" class="form-control" required>
+                        <option value="" disabled selected>Selecciona un whisky</option>
+                        {% for product in products if product.category == 'Whisky' %}
+                        <option value="{{ product.id }}">{{ product.brand }} {{ product.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <label class="input-label">Producto</label>
                 </div>
-                
-                <div class="form-group">
-                    <div class="currency-toggle">
-                        <button type="button" class="currency-btn active" data-currency="usd">USD</button>
-                        <button type="button" class="currency-btn" data-currency="bs">BS</button>
-                        <input type="hidden" name="currency" value="usd">
+
+                <div class="form-row">
+                    <div class="form-group animated-input">
+                        <input type="number" name="boxes" step="1" min="1" class="form-control" required>
+                        <label class="input-label">Cantidad (botellas)</label>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="currency-toggle">
+                            <button type="button" class="currency-btn active" data-currency="usd">USD</button>
+                            <button type="button" class="currency-btn" data-currency="bs">BS</button>
+                            <input type="hidden" name="currency" value="usd">
+                        </div>
                     </div>
                 </div>
-            </div>
-            
-            <div class="form-group animated-input">
-                <input type="number" name="purchase_price" step="0.01" min="0" class="form-control" required>
-                <label class="input-label">Precio total</label>
-                <span class="currency-symbol">$</span>
-            </div>
-            
-            <button type="submit" class="submit-btn whisky-btn">
-                <i class="fas fa-save"></i> Registrar Whisky
-            </button>
-        </form>
-    </div>
 
-    </div>
-
-    <div class="inventory-card misc-card">
-        <div class="card-header">
-            <i class="fas fa-bottle-water"></i>
-            <h2>Misceláneos</h2>
-            <span class="badge">1 und/botella</span>
-        </div>
-        
-        <form method="POST" class="inventory-form">
-            <input type="hidden" name="product_type" value="misc">
-            
-            <div class="form-group animated-input">
-                <select name="product_id" class="form-control" required>
-                    <option value="" disabled selected>Selecciona un producto</option>
-                    {% for product in products if product.category == 'Misceláneo' %}
-                    <option value="{{ product.id }}">{{ product.brand }} {{ product.name }}</option>
-                    {% endfor %}
-                </select>
-                <label class="input-label">Producto</label>
-            </div>
-            
-            <div class="form-row">
                 <div class="form-group animated-input">
-                    <input type="number" name="boxes" step="1" min="1" class="form-control" required>
-                    <label class="input-label">Cantidad (botellas)</label>
+                    <input type="number" name="purchase_price" step="0.01" min="0" class="form-control" required>
+                    <label class="input-label">Precio total</label>
+                    <span class="currency-symbol">$</span>
                 </div>
-                
-                <div class="form-group">
-                    <div class="currency-toggle">
-                        <button type="button" class="currency-btn active" data-currency="usd">USD</button>
-                        <button type="button" class="currency-btn" data-currency="bs">BS</button>
-                        <input type="hidden" name="currency" value="usd">
+
+                <button type="submit" class="submit-btn whisky-btn">
+                    <i class="fas fa-save"></i> Registrar Whisky
+                </button>
+            </form>
+        </div>
+
+        <div class="inventory-card misc-card">
+            <div class="card-header">
+                <i class="fas fa-bottle-water"></i>
+                <h2>Misceláneos</h2>
+                <span class="badge">1 und/botella</span>
+            </div>
+
+            <form method="POST" class="inventory-form">
+                <input type="hidden" name="product_type" value="misc">
+
+                <div class="form-group animated-input">
+                    <select name="product_id" class="form-control" required>
+                        <option value="" disabled selected>Selecciona un producto</option>
+                        {% for product in products if product.category == 'Misceláneo' %}
+                        <option value="{{ product.id }}">{{ product.brand }} {{ product.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <label class="input-label">Producto</label>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group animated-input">
+                        <input type="number" name="boxes" step="1" min="1" class="form-control" required>
+                        <label class="input-label">Cantidad (botellas)</label>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="currency-toggle">
+                            <button type="button" class="currency-btn active" data-currency="usd">USD</button>
+                            <button type="button" class="currency-btn" data-currency="bs">BS</button>
+                            <input type="hidden" name="currency" value="usd">
+                        </div>
                     </div>
                 </div>
-            </div>
-            
-            <div class="form-group animated-input">
-                <input type="number" name="purchase_price" step="0.01" min="0" class="form-control" required>
-                <label class="input-label">Precio total</label>
-                <span class="currency-symbol">$</span>
-            </div>
-            
-            <button type="submit" class="submit-btn misc-btn">
-                <i class="fas fa-save"></i> Registrar Misceláneos
-            </button>
-        </form>
-    </div>
 
+                <div class="form-group animated-input">
+                    <input type="number" name="purchase_price" step="0.01" min="0" class="form-control" required>
+                    <label class="input-label">Precio total</label>
+                    <span class="currency-symbol">$</span>
+                </div>
+
+                <button type="submit" class="submit-btn misc-btn">
+                    <i class="fas fa-save"></i> Registrar Misceláneos
+                </button>
+            </form>
+        </div>
+    </div>
 </div>
 
 <script>
-// Efectos para los inputs animados
-document.querySelectorAll('.animated-input input, .animated-input select').forEach(input => {
-    input.addEventListener('focus', function() {
-        this.parentNode.classList.add('focused');
-    });
-    
-    input.addEventListener('blur', function() {
-        if (this.value === '') {
-            this.parentNode.classList.remove('focused');
+    // Efectos para los inputs animados
+    document.querySelectorAll('.animated-input input, .animated-input select').forEach(input => {
+        input.addEventListener('focus', function () {
+            this.parentNode.classList.add('focused');
+        });
+
+        input.addEventListener('blur', function () {
+            if (this.value === '') {
+                this.parentNode.classList.remove('focused');
+            }
+        });
+
+        // Inicializar estado si ya tiene valor
+        if (input.value !== '') {
+            input.parentNode.classList.add('focused');
         }
     });
-    
-    // Inicializar estado si ya tiene valor
-    if (input.value !== '') {
-        input.parentNode.classList.add('focused');
-    }
-});
 
-// Cambiar moneda
-document.querySelectorAll('.currency-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-        const toggleGroup = this.closest('.currency-toggle');
-        toggleGroup.querySelectorAll('.currency-btn').forEach(b => b.classList.remove('active'));
-        this.classList.add('active');
-        toggleGroup.querySelector('input[type="hidden"]').value = this.dataset.currency;
-        
-        // Cambiar símbolo de moneda
-        const symbol = this.dataset.currency === 'usd' ? '$' : 'Bs';
-        this.closest('.inventory-form').querySelectorAll('.currency-symbol').forEach(el => {
-            el.textContent = symbol;
+    // Cambiar moneda
+    document.querySelectorAll('.currency-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const toggleGroup = this.closest('.currency-toggle');
+            toggleGroup.querySelectorAll('.currency-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            toggleGroup.querySelector('input[type="hidden"]').value = this.dataset.currency;
+
+            // Cambiar símbolo de moneda
+            const symbol = this.dataset.currency === 'usd' ? '$' : 'Bs';
+            this.closest('.inventory-form').querySelectorAll('.currency-symbol').forEach(el => {
+                el.textContent = symbol;
+            });
         });
     });
-});
 </script>
 {% endblock %}

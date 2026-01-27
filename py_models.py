@@ -2,7 +2,6 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
-from py_bcv import precio_bcv_actual
 import pytz
 from py_exchange import db
 
@@ -70,6 +69,8 @@ class Order(db.Model):
     payment_amount_usd = db.Column(db.Float)
     payment_method_id = db.Column(db.Integer, db.ForeignKey('payment_method.id'))
     payment_method = db.relationship('PaymentMethod')
+    closure_id = db.Column(db.Integer, db.ForeignKey('daily_closure.id'), nullable=True)
+    closure = db.relationship('DailyClosure', backref='orders')
 
 class OrderDetail(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -105,6 +106,35 @@ class PaymentMethod(db.Model):
     name = db.Column(db.String(50), unique=True, nullable=False)
     currency = db.Column(db.String(3), nullable=False)
     is_active = db.Column(db.Boolean, default=True)
+
+class DailyClosure(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.DateTime, default=datetime.utcnow)
+    total_usd = db.Column(db.Float, nullable=False)
+    total_bs = db.Column(db.Float, nullable=False)
+    orders_count = db.Column(db.Integer, nullable=False)
+    observations = db.Column(db.String(200))
+    closed_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    user = db.relationship('User', backref='closures')
+
+    @property
+    def method_breakdown(self):
+        breakdown = {}
+        for order in self.orders:
+            method = order.payment_method
+            if not method:
+                continue
+            
+            if method.name not in breakdown:
+                breakdown[method.name] = {
+                    'usd': 0.0,
+                    'bs': 0.0,
+                    'currency': method.currency.upper()
+                }
+            
+            breakdown[method.name]['usd'] += order.payment_amount_usd or 0.0
+            breakdown[method.name]['bs'] += order.payment_amount_bs or 0.0
+        return breakdown
 
 def create_initial_products():
     from py_exchange import get_current_rate
@@ -219,6 +249,17 @@ def create_initial_products():
         # Misceláneos
         {
             'name': 'Soda',
+            'brand': 'Polar',
+            'category': 'Misceláneo',
+            'presentation': 'Botella 355ml',
+            'price_usd': 0.53,
+            'price_unit_usd': 0.53,
+            'price_unit_bs': 0.53 * current_rate,
+            'cost_per_unit_usd': 0.3,
+            'is_alcoholic': False
+        },
+        {
+            'name': 'Malta',
             'brand': 'Polar',
             'category': 'Misceláneo',
             'presentation': 'Botella 355ml',

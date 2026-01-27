@@ -3,6 +3,17 @@
 {% block title %}Agregar Producto{% endblock %}
 
 {% block content %}
+<div class="inventory-nav">
+    <a href="{{ url_for('inventory_entry') }}" class="{{ 'active' if request.endpoint == 'inventory_entry' }}">Entrada
+        Mercancía</a>
+    <a href="{{ url_for('inventory_history') }}"
+        class="{{ 'active' if request.endpoint == 'inventory_history' }}">Histórico Movimientos</a>
+    {% if current_user.role == 'admin' %}
+    <a href="{{ url_for('inventory') }}" class="{{ 'active' if request.endpoint == 'inventory' }}">Inventario Real</a>
+    <a href="{{ url_for('create_product') }}" class="{{ 'active' if request.endpoint == 'create_product' }}">Agregar
+        Producto</a>
+    {% endif %}
+</div>
 <h1>Agregar Producto</h1>
 <form method="POST">
     <div class="form-group">
@@ -15,7 +26,14 @@
     </div>
     <div class="form-group">
         <label for="category">Categoría:</label>
-        <input type="text" name="category" class="form-control" required>
+        <select name="category" class="form-control" required>
+            <option value="" disabled selected>Selecciona una categoría</option>
+            <option value="Cerveza">Cerveza</option>
+            <option value="Ron">Ron</option>
+            <option value="Anís">Anís</option>
+            <option value="Whisky">Whisky</option>
+            <option value="Misceláneo">Misceláneo</option>
+        </select>
     </div>
     <div class="form-group">
         <label for="presentation">Presentación:</label>
@@ -26,10 +44,15 @@
         <input type="number" name="quantity" class="form-control" min="0" required>
     </div>
     <div class="form-group">
-        <label for="price_usd">Precio USD:</label>
+        <label for="price_usd">Precio de Venta (USD):</label>
         <input type="number" step="0.01" name="price_usd" class="form-control" min="0" required>
     </div>
-    
+    <div class="form-group">
+        <label for="purchase_price">Precio de Compra (USD Total):</label>
+        <input type="number" step="0.01" name="purchase_price" class="form-control" min="0" required>
+        <small class="form-text text-muted">¿Cuánto pagaste en total por la cantidad inicial?</small>
+    </div>
+
     <button type="submit" class="btn btn-primary">Guardar</button>
     <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancelar</a>
 </form>

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Sistema de Bar - {% block title %}{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
@@ -7,43 +8,49 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
+
 <body>
     <div class="main-navbar">
         {% if current_user.is_authenticated %}
-            <a href="/">Dashboard</a>
-            <div class="dropdown">
-                <button class="dropbtn">Inventario</button>
-                <div class="dropdown-content">
-                    <a href="{{ url_for('inventory_history') }}" class="active">Historico</a>
-                    <a href="{{ url_for('inventory_entry') }}">Registrar Entrada</a>
-                    {% if current_user.role == 'admin' %}
-                        <a href="{{ url_for('create_product') }}">Agregar Producto</a>
-                        <a href="{{ url_for('inventory') }}">Inventario</a>
-                    {% endif %}
-                </div>
+        <a href="/">Dashboard</a>
+        <div class="dropdown">
+            <button class="dropbtn">Inventario</button>
+            <div class="dropdown-content">
+                <a href="{{ url_for('inventory_history') }}" class="active">Historico</a>
+                <a href="{{ url_for('inventory_entry') }}">Registrar Entrada</a>
+                {% if current_user.role == 'admin' %}
+                <a href="{{ url_for('create_product') }}">Agregar Producto</a>
+                <a href="{{ url_for('inventory') }}">Inventario</a>
+                {% endif %}
             </div>
-            <div class="dropdown">
-                <button class="dropbtn">Salidas</button>
-                <div class="dropdown-content">
-                    <a href="/sales">Registrar Consumo</a>
-                    <a href="{{ url_for('view_tables') }}">Mesas</a>
-                    <a href="{{ url_for('inventory_history') }}">Reportes</a> <!-- Cambiado a inventory_history -->
-                </div>
+        </div>
+        <div class="dropdown">
+            <button class="dropbtn">Ventas</button>
+            <div class="dropdown-content">
+                <a href="/sales">Registrar Consumo</a>
+                <a href="{{ url_for('view_tables') }}">Mesas</a>
+                <a href="{{ url_for('bar_orders') }}">Órdenes de Barra</a>
+                <a href="{{ url_for('sales_reports') }}">Reportes de Venta</a>
+                {% if current_user.role == 'admin' %}
+                <a href="{{ url_for('daily_closure') }}">Cierre de Caja</a>
+                {% endif %}
             </div>
-            <a href="/logout" class="logout">Cerrar Sesión ({{ current_user.username }})</a>
+        </div>
+        <a href="/logout" class="logout">Cerrar Sesión ({{ current_user.username }})</a>
         {% endif %}
     </div>
 
     <div class="content">
         {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
         {% endwith %}
-        
+
         {% block content %}{% endblock %}
     </div>
 </body>
+
 </html>

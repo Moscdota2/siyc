@@ -1,14 +1,37 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, abort
 from flask_login import LoginManager, login_user, login_required, current_user, logout_user
 from functools import wraps
-from py_exchange import db  # Importamos db desde py_exchange
-from py_models import User, Product, Table, Order, OrderDetail, InventoryMovement, create_initial_products, PaymentMethod, calcular_precio_cervezas
-from py_bcv import precio_bcv_actual
-from py_exchange import get_current_rate, update_rate
+from py_exchange import db, init_exchange_rate, get_current_rate, update_rate, ExchangeRate
+from py_models import User, Product, Table, Order, OrderDetail, InventoryMovement, create_initial_products, PaymentMethod, calcular_precio_cervezas, DailyClosure
 from datetime import datetime
 
-app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///bar.db'
+import os
+import sys
+
+# Función para determinar la ruta base (manejando PyInstaller)
+def get_base_path():
+    if getattr(sys, 'frozen', False):
+        # Si es un ejecutable, la ruta base es la carpeta temporal de PyInstaller
+        return sys._MEIPASS
+    # Si es modo desarrollo, es la carpeta actual
+    return os.path.abspath(os.path.dirname(__file__))
+
+# Función para determinar dónde guardar datos persistentes (DB)
+def get_data_path():
+    if getattr(sys, 'frozen', False):
+        # En el .exe, guardamos la DB en la misma carpeta del ejecutable real
+        return os.path.dirname(sys.executable)
+    return os.path.abspath(os.path.dirname(__file__))
+
+base_path = get_base_path()
+data_path = get_data_path()
+
+app = Flask(__name__, 
+            template_folder=os.path.join(base_path, 'templates'),
+            static_folder=os.path.join(base_path, 'static'))
+
+db_path = os.path.join(data_path, 'bar.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 app.config['SECRET_KEY'] = 'mysecretkey'
 db.init_app(app)
 
@@ -76,8 +99,13 @@ def index():
     occupied_tables = Table.query.filter_by(status="ocupada").count()
     
     # Calcular ventas del día (ejemplo)
-    today = datetime.today().date()
-    daily_sales = 0  # Puedes implementar la lógica real aquí
+    # Calcular ventas del día
+    today = datetime.now().date()
+    daily_sales_orders = Order.query.filter(
+        Order.status == "pagado",
+        db.func.date(Order.closed_at) == today
+    ).all()
+    daily_sales = sum(o.payment_amount_usd for o in daily_sales_orders)
     
     return render_template('index.html',
                          products=products,
@@ -115,6 +143,7 @@ def manage_exchange_rate():
 def create_product():
     if request.method == 'POST':
         try:
+            current_rate = get_current_rate()
             new_product = Product(
                 name=request.form['name'],
                 brand=request.form['brand'],
@@ -122,7 +151,9 @@ def create_product():
                 presentation=request.form['presentation'],
                 quantity=int(request.form['quantity']),
                 price_usd=float(request.form['price_usd']),
-                price_bs=float(request.form['price_usd']) * precio_bcv_actual,
+                price_bs=float(request.form['price_usd']) * current_rate,
+                price_unit_usd=float(request.form['price_usd']),
+                price_unit_bs=float(request.form['price_usd']) * current_rate,
                 last_modified_by=current_user.id
             )
             db.session.add(new_product)
@@ -130,15 +161,18 @@ def create_product():
 
             # Registrar movimiento de creación (NUEVO)
             initial_quantity = int(request.form['quantity'])
+            purchase_price = float(request.form.get('purchase_price', 0))
+            
             creation_movement = InventoryMovement(
                 product_id=new_product.id,
                 user_id=current_user.id,
                 movement_type='entrada',
                 quantity=initial_quantity,
-                # is_initial_stock=True,  # Marcamos como stock inicial
                 notes=f"Creación de producto: {new_product.name}",
-                currency='usd',  # Valor por defecto
-                distributor='sistema'  # Valor especial
+                currency='usd',
+                distributor='sistema',
+                purchase_price=purchase_price,
+                total_usd_investment=purchase_price
             )
             db.session.add(creation_movement)
             
@@ -157,13 +191,16 @@ def update_product(id):
     product = Product.query.get_or_404(id)
     if request.method == 'POST':
         try:
+            current_rate = get_current_rate()
             product.name = request.form['name']
             product.brand = request.form['brand']
             product.category = request.form['category']
             product.presentation = request.form['presentation']
             product.quantity = int(request.form['quantity'])
             product.price_usd = float(request.form['price_usd'])
-            product.price_bs = float(request.form['price_usd']) * precio_bcv_actual
+            product.price_bs = float(request.form['price_usd']) * current_rate
+            product.price_unit_usd = float(request.form['price_usd'])
+            product.price_unit_bs = float(request.form['price_usd']) * current_rate
             product.last_modified_by = current_user.id
             db.session.commit()
             flash('Producto actualizado exitosamente', 'success')
@@ -219,23 +256,29 @@ def inventory_entry():
         units = int(boxes * units_per_box)
         
         # Calcular precio en dólares según moneda de pago y distribuidor
+        total_usd_investment = 0.0
         if currency == 'bs':
-            if product_type == 'cerveza':
-                if distributor == 'polar':
-                    usd_price_per_box = 20.80
-                else:  # regional
-                    usd_price_per_box = 19.50
-                total_usd_investment = boxes * usd_price_per_box
-            elif product_type == 'ron':
-                # Para ron en BS, calculamos precio unitario
-                usd_price_per_unit = purchase_price / (units * precio_bcv_actual)
-                total_usd_investment = usd_price_per_unit * units
-            elif product_type == 'misc':
-                usd_price_per_unit = purchase_price / (units * precio_bcv_actual)
-                total_usd_investment = usd_price_per_unit * units
-            else:  # Anís, whisky
-                usd_price_per_unit = purchase_price / (units * precio_bcv_actual)
-                total_usd_investment = usd_price_per_unit * units
+            current_rate = get_current_rate()
+            if current_rate > 0:
+                if product_type == 'cerveza':
+                    if distributor == 'polar':
+                        usd_price_per_box = 20.80
+                    else:  # regional
+                        usd_price_per_box = 19.50
+                    total_usd_investment = boxes * usd_price_per_box
+                elif product_type == 'ron':
+                    # Para ron en BS, calculamos precio unitario
+                    usd_price_per_unit = purchase_price / (units * current_rate)
+                    total_usd_investment = usd_price_per_unit * units
+                elif product_type == 'misc':
+                    usd_price_per_unit = purchase_price / (units * current_rate)
+                    total_usd_investment = usd_price_per_unit * units
+                else:  # Anís, whisky
+                    usd_price_per_unit = purchase_price / (units * current_rate)
+                    total_usd_investment = usd_price_per_unit * units
+            else:
+                flash("Error: Tasa de cambio no disponible o es cero. No se puede calcular la inversión en USD.", "danger")
+                return redirect(url_for('inventory_entry'))
         else:  # USD
             if product_type == 'cerveza':
                 if distributor == 'polar':
@@ -294,7 +337,7 @@ def inventory_entry():
     return render_template(
         "inventory/inventory_entry.html",
         products=beers + rums + anises + whiskies + miscs,
-        precio_bcv=precio_bcv_actual
+        precio_bcv=get_current_rate()
     )
 
 
@@ -601,11 +644,11 @@ def close_order(table_id):
     
     # Calcular montos en ambas monedas
     if payment_currency == 'bs':
+        payment_amount_bs = payment_amount
+        payment_amount_usd = payment_amount / current_rate
+    else:  # USD
         payment_amount_usd = payment_amount
         payment_amount_bs = payment_amount * current_rate
-    else:  # USD
-        payment_amount_bs = payment_amount
-        payment_amount_usd = payment_amount * current_rate
     
     # Validar que el pago cubra el total
     if payment_currency == 'bs' and payment_amount_bs < active_order.total_price * current_rate:
@@ -655,7 +698,10 @@ def close_order(table_id):
 @app.route('/inventory_history')
 @manager_or_admin_required
 def inventory_history():
-    movements = db.session.query(
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    
+    movements_pagination = db.session.query(
         InventoryMovement,
         Product
     ).join(
@@ -664,9 +710,10 @@ def inventory_history():
         db.contains_eager(InventoryMovement.product)
     ).order_by(
         InventoryMovement.movement_date.desc()
-    ).all()
+    ).paginate(page=page, per_page=per_page, error_out=False)
     
-    return render_template('inventory/inventory_history.html', movements=movements)
+    return render_template('inventory/inventory_history.html', 
+                          movements_pagination=movements_pagination)
 
 
 @app.route('/edit_movement/<int:movement_id>', methods=['GET', 'POST'])
@@ -753,6 +800,11 @@ def sales():
             'id': product.id,
             'name': product.name,
             'price_usd': float(product.price_usd),
+            'price_unit_usd': float(product.price_unit_usd or product.price_usd),
+            'price_half_tobo_usd': float(product.price_half_tobo_usd or 0),
+            'price_tobo_usd': float(product.price_tobo_usd or 0),
+            'price_half_box_usd': float(product.price_half_box_usd or 0),
+            'price_box_usd': float(product.price_box_usd or 0),
             'quantity': product.quantity,
             'is_combo': False,
             'available_quantity': product.quantity,
@@ -781,6 +833,7 @@ def sales():
     return render_template('sales/sales.html', 
                          products=products_data, 
                          tables=tables,
+                         current_rate=get_current_rate(),
                          debug=True)
 
 
@@ -788,18 +841,23 @@ def sales():
 @login_required
 def sales_reports():
     # Obtener todas las órdenes pagadas
-    completed_orders = Order.query.filter_by(status="pagado").all()
+    completed_orders = Order.query.filter_by(status="pagado").order_by(Order.closed_at.desc()).all()
     
-    # Calcular total de ventas
-    total_sales = sum(order.total_price for order in completed_orders)
+    # Obtener cierres históricos
+    closures = DailyClosure.query.order_by(DailyClosure.date.desc()).all()
     
-     # Calcular totales por moneda
-    total_usd = sum(o.payment_amount_usd for o in completed_orders if o.payment_currency == 'usd')
-    total_bs = sum(o.payment_amount_bs for o in completed_orders if o.payment_currency == 'bs')
+    # Calcular total de ventas (de órdenes no cerradas aún, para info)
+    pending_closure_orders = Order.query.filter_by(status="pagado", closure_id=None).all()
+    pending_total_sales = sum(order.total_price for order in pending_closure_orders)
+    
+     # Calcular totales generales (ejemplo)
+    total_usd = sum(o.payment_amount_usd for o in completed_orders)
+    total_bs = sum(o.payment_amount_bs for o in completed_orders)
     
     return render_template('sales/sales_reports.html', 
                          orders=completed_orders,
-                         total_sales=total_sales,
+                         closures=closures,
+                         pending_total_sales=pending_total_sales,
                          total_usd=total_usd,
                          total_bs=total_bs,
                          current_rate=get_current_rate())
@@ -912,7 +970,8 @@ def register_sale():
                             subtotal = product.price_box_usd
                             quantity = 36
                         else:
-                            subtotal = product.price_unit_usd * quantity
+                            unit_price = product.price_unit_usd if product.price_unit_usd is not None else product.price_usd
+                            subtotal = unit_price * quantity
 
                         total += subtotal
                         order_detail = OrderDetail(
@@ -1118,16 +1177,11 @@ def close_bar_order(order_id):
         
         # Calcular montos
         if payment_currency == 'bs':
-            payment_amount_usd = payment_amount
-            
-            print(f"Payment amount in USD: {payment_amount_usd}")
-            payment_amount_bs = payment_amount_usd * current_rate
-            print(f"Payment amount in bs: {payment_amount_bs}")
+            payment_amount_bs = payment_amount
+            payment_amount_usd = payment_amount / current_rate
         else:  # USD
             payment_amount_usd = payment_amount
-            print(f"Payment amount in USD: {payment_amount_usd}")
             payment_amount_bs = payment_amount * current_rate
-            print(f"Payment amount in Bs: {payment_amount_bs}")
         
         # Validar pago
         if payment_currency == 'bs' and payment_amount_bs < order.total_price * current_rate:
@@ -1138,9 +1192,9 @@ def close_bar_order(order_id):
         #     flash('El monto pagado no cubre el total', 'danger')
         #     return redirect(url_for('view_bar_order', order_id=order_id))
         
-        # Actualizar orden (CORRECCIÓN PRINCIPAL: usar datetime.now())
+        # Actualizar orden
         order.status = "pagado"
-        order.closed_at = datetime.now()  # ¡Aquí estaba el error!
+        order.closed_at = datetime.now() 
         order.payment_currency = payment_currency
         order.exchange_rate = current_rate
         order.payment_amount_bs = payment_amount_bs
@@ -1167,6 +1221,66 @@ def close_bar_order(order_id):
         return redirect(url_for('view_bar_order', order_id=order_id))
     
 
+@app.route('/daily_closure', methods=['GET', 'POST'])
+@admin_required
+def daily_closure():
+    # Obtener todas las órdenes pagadas que no tienen un closure_id
+    pending_orders = Order.query.filter_by(status="pagado", closure_id=None).all()
+    
+    total_usd = sum(o.payment_amount_usd or 0.0 for o in pending_orders)
+    total_bs = sum(o.payment_amount_bs or 0.0 for o in pending_orders)
+
+    # Calcular desglose por método de pago
+    method_totals = {}
+    for order in pending_orders:
+        method = order.payment_method
+        if not method:
+            continue
+            
+        if method.name not in method_totals:
+            method_totals[method.name] = {
+                'usd': 0.0,
+                'bs': 0.0,
+                'currency': method.currency.upper()
+            }
+        
+        method_totals[method.name]['usd'] += order.payment_amount_usd or 0.0
+        method_totals[method.name]['bs'] += order.payment_amount_bs or 0.0
+
+    if request.method == 'POST':
+        if not pending_orders:
+            flash('No hay órdenes pendientes para cerrar', 'warning')
+            return redirect(url_for('daily_closure'))
+            
+        try:
+            new_closure = DailyClosure(
+                total_usd=total_usd,
+                total_bs=total_bs,
+                orders_count=len(pending_orders),
+                observations=request.form.get('observations', ''),
+                closed_by=current_user.id,
+                date=datetime.now()
+            )
+            db.session.add(new_closure)
+            db.session.flush() # Para obtener el ID
+            
+            # Vincular órdenes al cierre
+            for order in pending_orders:
+                order.closure_id = new_closure.id
+                
+            db.session.commit()
+            flash(f'Cierre de caja realizado exitosamente. Total: ${total_usd:.2f}', 'success')
+            return redirect(url_for('sales_reports'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al realizar el cierre: {str(e)}', 'danger')
+            
+    return render_template('sales/daily_closure.html', 
+                         orders=pending_orders, 
+                         total_usd=total_usd, 
+                         total_bs=total_bs,
+                         method_totals=method_totals)
+
 @app.route('/bar_orders')
 @login_required
 def bar_orders():
@@ -1174,12 +1288,12 @@ def bar_orders():
         Order.status == 'pendiente',
         Order.table_id == None  # Órdenes sin mesa asignada
     ).all()
-    return render_template('sales/bar_orders.html', orders=bar_orders)
+    return render_template('sales/bar_orders.html', 
+                         orders=bar_orders,
+                         current_rate=get_current_rate())
 
 if __name__ == '__main__':
     with app.app_context():
-    # Eliminar todas las tablas (solo en desarrollo!)
-        db.drop_all()
         
         # Crear todas las tablas con los nuevos esquemas
         db.create_all()

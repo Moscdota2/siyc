@@ -4,51 +4,245 @@
 
 {% block content %}
 <div class="sales-nav">
-    <a href="{{ url_for('sales') }}">Consumo Directo</a>
-    <a href="{{ url_for('view_tables') }}" class="{% if not is_bar_order %}active{% endif %}">Ordenes de Mesas</a>
-    <a href="{{ url_for('bar_orders') }}">Ordenes de Barra (Usuarios)</a>
-    <a href="{{ url_for('inventory_history') }}">Historico de Movimientos</a>
-    <a href="{{ url_for('sales_reports') }}">Reportes de Venta</a>
-    <a href="{{ url_for('manage_exchange_rate') }}">Tasa Bolivares</a>
+    <a href="{{ url_for('sales') }}" class="{{ 'active' if request.endpoint == 'sales' }}">Consumo Directo</a>
+    <a href="{{ url_for('view_tables') }}"
+        class="{{ 'active' if request.endpoint == 'view_tables' or request.endpoint == 'view_order' }}">Ordenes de
+        Mesas</a>
+    <a href="{{ url_for('bar_orders') }}"
+        class="{{ 'active' if request.endpoint == 'bar_orders' or request.endpoint == 'view_bar_order' }}">Ordenes de
+        Barra</a>
+    <a href="{{ url_for('sales_reports') }}" class="{{ 'active' if request.endpoint == 'sales_reports' }}">Reportes</a>
+    <a href="{{ url_for('daily_closure') }}" class="{{ 'active' if request.endpoint == 'daily_closure' }}">Cierre de
+        Caja</a>
+    <a href="{{ url_for('manage_exchange_rate') }}"
+        class="{{ 'active' if request.endpoint == 'manage_exchange_rate' }}">Tasa BCV</a>
 </div>
+
 <div class="reports-container">
     <h1>Reportes de Ventas</h1>
-    
-    <div class="summary-card">
-        <h2>Resumen</h2>
-        <p>Total de ventas: ${{ "%.2f"|format(total_sales) }}</p>
-        <p>Número de pedidos: {{ orders|length }}</p>
+
+    <div class="reports-grid">
+        <div class="main-column">
+            <h2>Ventas Recientes</h2>
+            <div class="summary-card info-card">
+                <p><strong>Total Pendiente por Cuadrar:</strong> ${{ "%.2f"|format(pending_total_sales) }}</p>
+                <a href="{{ url_for('daily_closure') }}" class="btn btn-sm btn-outline-primary">Ir a Cierre de Caja</a>
+            </div>
+
+            <table class="sales-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Tipo</th>
+                        <th>Detalle</th>
+                        <th>Total USD</th>
+                        <th>Pago</th>
+                        <th>Cierre</th>
+                        <th>Fecha</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders[:20] %}
+                    <tr>
+                        <td>{{ order.id }}</td>
+                        <td>{{ 'Mesa ' ~ order.table.number if order.table_id else order.customer_name }}</td>
+                        <td>${{ "%.2f"|format(order.total_price) }}</td>
+                        <td>
+                            <span class="badge badge-success">Pagado</span>
+                        </td>
+                        <td>
+                            {% if order.closure_id %}
+                            <span class="badge badge-success">Cuadrado</span>
+                            {% else %}
+                            <span class="badge badge-warning">Pendiente</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ order.closed_at.strftime('%d/%m/%Y %H:%M') if order.closed_at else 'N/A' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="side-column">
+            <h2>Historial de Cierres</h2>
+            <div class="closures-list">
+                {% for closure in closures %}
+                <div class="closure-item">
+                    <div class="closure-header">
+                        <div class="closure-info">
+                            <strong><i class="fas fa-calendar-alt"></i> {{ closure.date.strftime('%d/%m/%Y %H:%M')
+                                }}</strong>
+                            <small>{{ closure.orders_count }} órdenes | {{ closure.user.username }}</small>
+                        </div>
+                        <div class="closure-amounts">
+                            <span class="closure-total usd">${{ "%.2f"|format(closure.total_usd) }}</span>
+                            <span class="closure-total bs">{{ "%.2f"|format(closure.total_bs) }} Bs</span>
+                        </div>
+                    </div>
+
+                    <div class="closure-breakdown">
+                        {% for name, totals in closure.method_breakdown.items() %}
+                        <div class="breakdown-tag">
+                            <span class="method-name">{{ name }}:</span>
+                            {% if totals.currency == 'USD' %}
+                            <span class="method-val usd">${{ "%.2f"|format(totals.usd) }}</span>
+                            {% else %}
+                            <span class="method-val bs">{{ "%.2f"|format(totals.bs) }} Bs</span>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    {% if closure.observations %}
+                    <div class="closure-obs">
+                        <p><i class="fas fa-comment-alt"></i> {{ closure.observations }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
     </div>
-    
-    <table class="sales-table">
-        <tr>
-            <th>ID Pedido</th>
-            <th>Tipo</th>
-            <th>Detalle</th>
-            <th>Total</th>
-            <th>Fecha</th>
-        </tr>
-        {% for order in orders %}
-        <tr>
-            <td>{{ order.id }}</td>
-            <td>
-                {% if order.table_id %}
-                    Mesa
-                {% else %}
-                    Barra
-                {% endif %}
-            </td>
-            <td>
-                {% if order.table_id %}
-                    Mesa {{ order.table.number }}
-                {% else %}
-                    {{ order.customer_name }}
-                {% endif %}
-            </td>
-            <td>${{ "%.2f"|format(order.total_price) }}</td>
-            <td>{{ order.closed_at.strftime('%d/%m/%Y %H:%M') if order.closed_at else 'N/A' }}</td>
-        </tr>
-        {% endfor %}
-    </table>
 </div>
+
+<style>
+    .reports-grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 30px;
+    }
+
+    .info-card {
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #e7f3ff;
+        border-left: 4px solid #007bff;
+    }
+
+    .badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        text-transform: uppercase;
+    }
+
+    .badge-success {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .badge-warning {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .closures-list {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+    }
+
+    .closure-item {
+        padding: 20px;
+        border-bottom: 1px solid #f1f5f9;
+        transition: background 0.2s;
+    }
+
+    .closure-item:hover {
+        background: #f8fafc;
+    }
+
+    .closure-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 12px;
+    }
+
+    .closure-info {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .closure-info strong {
+        font-size: 15px;
+        color: #1e293b;
+    }
+
+    .closure-info small {
+        color: #64748b;
+    }
+
+    .closure-amounts {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 2px;
+    }
+
+    .closure-total {
+        font-weight: 800;
+        font-size: 16px;
+    }
+
+    .closure-total.usd {
+        color: #10b981;
+    }
+
+    .closure-total.bs {
+        color: #3498db;
+        font-size: 13px;
+    }
+
+    .closure-breakdown {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+
+    .breakdown-tag {
+        background: #f1f5f9;
+        padding: 4px 10px;
+        border-radius: 8px;
+        font-size: 12px;
+        display: flex;
+        gap: 6px;
+    }
+
+    .method-name {
+        color: #64748b;
+        font-weight: 600;
+    }
+
+    .method-val {
+        font-weight: 700;
+    }
+
+    .method-val.usd {
+        color: #059669;
+    }
+
+    .method-val.bs {
+        color: #2563eb;
+    }
+
+    .closure-obs {
+        margin-top: 10px;
+        padding: 8px 12px;
+        background: #fffbeb;
+        border-radius: 8px;
+        color: #92400e;
+        font-size: 13px;
+    }
+
+    .closure-obs p {
+        margin: 0;
+    }
+</style>
 {% endblock %}

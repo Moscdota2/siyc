@@ -4,46 +4,224 @@
 
 {% block content %}
 <div class="sales-nav">
-    <a href="{{ url_for('sales') }}">Consumo Directo</a>
-    <a href="{{ url_for('view_tables') }}" class="{% if not is_bar_order %}active{% endif %}">Ordenes de Mesas</a>
-    <a href="{{ url_for('bar_orders') }}">Ordenes de Barra (Usuarios)</a>
-    <a href="{{ url_for('inventory_history') }}">Historico de Movimientos</a>
-    <a href="{{ url_for('sales_reports') }}">Reportes de Venta</a>
-    <a href="{{ url_for('manage_exchange_rate') }}">Tasa Bolivares</a>
+    <a href="{{ url_for('sales') }}" class="{{ 'active' if request.endpoint == 'sales' }}">Consumo Directo</a>
+    <a href="{{ url_for('view_tables') }}"
+        class="{{ 'active' if request.endpoint == 'view_tables' or request.endpoint == 'view_order' }}">Ordenes de
+        Mesas</a>
+    <a href="{{ url_for('bar_orders') }}"
+        class="{{ 'active' if request.endpoint == 'bar_orders' or request.endpoint == 'view_bar_order' }}">Ordenes de
+        Barra</a>
+    <a href="{{ url_for('sales_reports') }}" class="{{ 'active' if request.endpoint == 'sales_reports' }}">Reportes</a>
+    <a href="{{ url_for('daily_closure') }}" class="{{ 'active' if request.endpoint == 'daily_closure' }}">Cierre de
+        Caja</a>
+    <a href="{{ url_for('manage_exchange_rate') }}"
+        class="{{ 'active' if request.endpoint == 'manage_exchange_rate' }}">Tasa BCV</a>
 </div>
-<h1>Órdenes de Barra Pendientes</h1>
+<div class="orders-container">
+    <div class="orders-header">
+        <h1>
+            <i class="fas fa-glass-martini-alt"></i>
+            Órdenes de Barra Pendientes
+        </h1>
+        <div class="header-stats">
+            <span class="stat-badge">
+                <strong>{{ orders|length }}</strong> Pendientes
+            </span>
+        </div>
+    </div>
 
-<table class="table">
-    <thead>
-        <tr>
-            <th>ID</th>
-            <th>Cliente</th>
-            <th>Total</th>
-            <th>Acciones</th>
-        </tr>
-    </thead>
-    <tbody>
+    <div class="orders-grid">
         {% for order in orders %}
-        <tr>
-            <td>{{ order.id }}</td>
-            <td>{{ order.customer_name }}</td>
-            <td>${{ "%.2f"|format(order.total_price) }}</td>
-            <td>
-                <a href="{{ url_for('view_bar_order', order_id=order.id) }}" 
-                   class="btn btn-primary">
-                    Ver
+        <div class="order-card">
+            <div class="card-header">
+                <span class="order-id">#{{ order.id }}</span>
+                <span class="status-indicator"></span>
+            </div>
+            <div class="card-body">
+                <h3>{{ order.customer_name }}</h3>
+                <div class="price-info">
+                    <span class="price-usd">${{ "%.2f"|format(order.total_price) }}</span>
+                    <span class="price-bs">{{ "%.2f"|format(order.total_price * current_rate) }} Bs</span>
+                </div>
+            </div>
+            <div class="card-footer">
+                <a href="{{ url_for('view_bar_order', order_id=order.id) }}" class="btn-view">
+                    Atender Orden <i class="fas fa-chevron-right"></i>
                 </a>
-            </td>
-        </tr>
+            </div>
+        </div>
         {% else %}
-        <tr>
-            <td colspan="4">No hay órdenes de barra pendientes</td>
-        </tr>
+        <div class="no-orders">
+            <i class="fas fa-check-circle"></i>
+            <p>No hay órdenes de barra pendientes</p>
+        </div>
         {% endfor %}
-    </tbody>
-</table>
+    </div>
+</div>
 
 <a href="{{ url_for('sales') }}" class="btn btn-secondary">
     Volver a Ventas
 </a>
+
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    .orders-container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 20px;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .orders-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+    }
+
+    .orders-header h1 {
+        margin: 0;
+        font-size: 26px;
+        color: #1e293b;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .orders-header h1 i {
+        color: #3498db;
+    }
+
+    .stat-badge {
+        background: #e2e8f0;
+        padding: 6px 14px;
+        border-radius: 50px;
+        font-size: 14px;
+        color: #475569;
+    }
+
+    .orders-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 25px;
+    }
+
+    .order-card {
+        background: white;
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        transition: transform 0.2s, box-shadow 0.2s;
+        border: 1px solid #f1f5f9;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .order-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+
+    .card-header {
+        padding: 15px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .order-id {
+        font-weight: 700;
+        color: #94a3b8;
+        font-size: 14px;
+    }
+
+    .status-indicator {
+        width: 10px;
+        height: 10px;
+        background: #fbbf24;
+        border-radius: 50%;
+        box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.1);
+    }
+
+    .card-body {
+        padding: 20px;
+        flex-grow: 1;
+    }
+
+    .card-body h3 {
+        margin: 0 0 15px 0;
+        font-size: 20px;
+        color: #1e293b;
+    }
+
+    .price-info {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .price-usd {
+        font-size: 24px;
+        font-weight: 800;
+        color: #1e293b;
+    }
+
+    .price-bs {
+        font-size: 14px;
+        color: #64748b;
+        font-weight: 500;
+    }
+
+    .card-footer {
+        padding: 15px 20px;
+        background: #f8fafc;
+    }
+
+    .btn-view {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: 100%;
+        padding: 12px;
+        background: #3498db;
+        color: white;
+        text-decoration: none;
+        border-radius: 12px;
+        font-weight: 600;
+        transition: background 0.2s;
+    }
+
+    .btn-view:hover {
+        background: #2980b9;
+    }
+
+    .no-orders {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 60px;
+        background: #f1f5f9;
+        border-radius: 20px;
+        color: #64748b;
+    }
+
+    .no-orders i {
+        font-size: 48px;
+        margin-bottom: 20px;
+        color: #cbd5e1;
+    }
+
+    .btn-secondary {
+        margin-top: 30px;
+        display: inline-block;
+        padding: 12px 24px;
+        background: #94a3b8;
+        color: white;
+        text-decoration: none;
+        border-radius: 12px;
+        font-weight: 600;
+    }
+</style>
 {% endblock %}

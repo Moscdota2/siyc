@@ -1,0 +1,278 @@
+{% extends 'base.html' %}
+
+{% block title %}Cierre de Caja{% endblock %}
+
+{% block content %}
+<div class="sales-nav">
+    <a href="{{ url_for('sales') }}" class="{{ 'active' if request.endpoint == 'sales' }}">Consumo Directo</a>
+    <a href="{{ url_for('view_tables') }}"
+        class="{{ 'active' if request.endpoint == 'view_tables' or request.endpoint == 'view_order' }}">Ordenes de
+        Mesas</a>
+    <a href="{{ url_for('bar_orders') }}"
+        class="{{ 'active' if request.endpoint == 'bar_orders' or request.endpoint == 'view_bar_order' }}">Ordenes de
+        Barra</a>
+    <a href="{{ url_for('sales_reports') }}" class="{{ 'active' if request.endpoint == 'sales_reports' }}">Reportes</a>
+    <a href="{{ url_for('daily_closure') }}" class="{{ 'active' if request.endpoint == 'daily_closure' }}">Cierre de
+        Caja</a>
+    <a href="{{ url_for('manage_exchange_rate') }}"
+        class="{{ 'active' if request.endpoint == 'manage_exchange_rate' }}">Tasa BCV</a>
+</div>
+
+<div class="closure-container">
+    <h1>Realizar Cierre de Caja</h1>
+
+    <div class="summary-cards">
+        <div class="summary-card total-usd">
+            <i class="fas fa-dollar-sign"></i>
+            <div class="card-info">
+                <h3>Total USD</h3>
+                <p class="amount">${{ "%.2f"|format(total_usd) }}</p>
+            </div>
+        </div>
+        <div class="summary-card total-bs">
+            <i class="fas fa-money-bill-wave"></i>
+            <div class="card-info">
+                <h3>Total Bs</h3>
+                <p class="amount">{{ "%.2f"|format(total_bs) }} Bs</p>
+            </div>
+        </div>
+        <div class="summary-card total-orders">
+            <i class="fas fa-receipt"></i>
+            <div class="card-info">
+                <h3>Órdenes</h3>
+                <p class="amount">{{ orders|length }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Desglose por Método de Pago -->
+    <div class="breakdown-section">
+        <h2><i class="fas fa-list-ul"></i> Desglose por Método de Pago</h2>
+        <div class="breakdown-grid">
+            {% for name, totals in method_totals.items() %}
+            <div class="breakdown-card">
+                <div class="breakdown-header">
+                    <strong>{{ name }}</strong>
+                    <span class="badge badge-currency">{{ totals.currency }}</span>
+                </div>
+                <div class="breakdown-body">
+                    {% if totals.currency == 'USD' %}
+                    <p class="method-amount usd-amount">${{ "%.2f"|format(totals.usd) }}</p>
+                    {% else %}
+                    <p class="method-amount bs-amount">{{ "%.2f"|format(totals.bs) }} Bs</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if orders %}
+    <form method="POST" class="closure-form">
+        <div class="form-group">
+            <label for="observations">Observaciones del Cierre</label>
+            <textarea name="observations" id="observations" class="form-control" rows="3"
+                placeholder="Ej: Faltó detalle en mesa 5..."></textarea>
+        </div>
+
+        <div class="closure-actions">
+            <button type="submit" class="btn btn-primary btn-lg"
+                onclick="return confirm('¿Está seguro de realizar el cierre de caja?')">
+                Confirmar y Cerrar Día
+            </button>
+        </div>
+    </form>
+
+    <h2>Detalle de Órdenes Pendientes</h2>
+    <table class="sales-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Cliente/Mesa</th>
+                <th>Monto USD</th>
+                <th>Monto BS</th>
+                <th>Método de Pago</th>
+                <th>Fecha</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for order in orders %}
+            <tr>
+                <td>{{ order.id }}</td>
+                <td>
+                    {% if order.table_id %}
+                    Mesa {{ order.table.number }}
+                    {% else %}
+                    {{ order.customer_name }}
+                    {% endif %}
+                </td>
+                <td>${{ "%.2f"|format(order.payment_amount_usd) }}</td>
+                <td>{{ "%.2f"|format(order.payment_amount_bs) }} Bs</td>
+                <td>{{ order.payment_method.name }}</td>
+                <td>{{ order.closed_at.strftime('%d/%m/%Y %H:%M') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="alert alert-info">
+        No hay órdenes pagadas pendientes por cerrar.
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    .closure-container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 20px;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .summary-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin-bottom: 40px;
+    }
+
+    .summary-card {
+        background: white;
+        padding: 25px;
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        border: 1px solid #f1f5f9;
+        transition: transform 0.2s;
+    }
+
+    .summary-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .summary-card i {
+        font-size: 32px;
+        width: 60px;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 16px;
+    }
+
+    .total-usd i {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .total-bs i {
+        background: #e0f2fe;
+        color: #075985;
+    }
+
+    .total-orders i {
+        background: #f1f5f9;
+        color: #475569;
+    }
+
+    .card-info h3 {
+        margin: 0;
+        font-size: 14px;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .card-info .amount {
+        margin: 4px 0 0 0;
+        font-size: 24px;
+        font-weight: 800;
+        color: #1e293b;
+    }
+
+    /* Breakdown Section */
+    .breakdown-section {
+        margin-bottom: 40px;
+    }
+
+    .breakdown-section h2 {
+        font-size: 20px;
+        color: #1e293b;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .breakdown-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 20px;
+    }
+
+    .breakdown-card {
+        background: #f8fafc;
+        padding: 20px;
+        border-radius: 16px;
+        border: 1px solid #e2e8f0;
+    }
+
+    .breakdown-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+
+    .breakdown-header strong {
+        font-size: 15px;
+        color: #334155;
+    }
+
+    .badge-currency {
+        background: #e2e8f0;
+        color: #475569;
+        font-size: 10px;
+        padding: 4px 8px;
+        border-radius: 50px;
+    }
+
+    .method-amount {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 700;
+    }
+
+    .usd-amount {
+        color: #10b981;
+    }
+
+    .bs-amount {
+        color: #3498db;
+    }
+
+    /* Form Styles */
+    .closure-form {
+        background: #f1f5f9;
+        padding: 30px;
+        border-radius: 20px;
+        margin-bottom: 40px;
+    }
+
+    .closure-actions {
+        margin-top: 20px;
+        text-align: right;
+    }
+
+    .btn-lg {
+        padding: 14px 30px;
+        font-size: 16px;
+        border-radius: 12px;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}

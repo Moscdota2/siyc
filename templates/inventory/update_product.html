@@ -7,65 +7,81 @@
 {% endblock %}
 
 {% block content %}
+<div class="inventory-nav">
+    <a href="{{ url_for('inventory_entry') }}" class="{{ 'active' if request.endpoint == 'inventory_entry' }}">Entrada
+        Mercancía</a>
+    <a href="{{ url_for('inventory_history') }}"
+        class="{{ 'active' if request.endpoint == 'inventory_history' }}">Histórico Movimientos</a>
+    {% if current_user.role == 'admin' %}
+    <a href="{{ url_for('inventory') }}" class="{{ 'active' if request.endpoint == 'inventory' }}">Inventario Real</a>
+    <a href="{{ url_for('create_product') }}" class="{{ 'active' if request.endpoint == 'create_product' }}">Agregar
+        Producto</a>
+    {% endif %}
+</div>
 <div class="product-update-container">
     <div class="update-card">
         <div class="card-header">
             <h2><i class="fas fa-edit"></i> Actualizar Producto</h2>
             <div class="product-image">
                 {% if product.category == 'Cerveza' %}
-                    <i class="fas fa-beer"></i>
+                <i class="fas fa-beer"></i>
                 {% elif product.category == 'Ron' %}
-                    <i class="fas fa-glass-whiskey"></i>
+                <i class="fas fa-glass-whiskey"></i>
                 {% else %}
-                    <i class="fas fa-wine-bottle"></i>
+                <i class="fas fa-wine-bottle"></i>
                 {% endif %}
             </div>
         </div>
-        
+
         <form method="POST" class="update-form">
             <div class="form-row">
                 <div class="form-group">
                     <label for="name">Nombre:</label>
                     <input type="text" id="name" name="name" value="{{ product.name }}" required>
                 </div>
-                
+
                 <div class="form-group">
                     <label for="brand">Marca:</label>
                     <input type="text" id="brand" name="brand" value="{{ product.brand }}" required>
                 </div>
             </div>
-            
+
             <div class="form-row">
                 <div class="form-group">
                     <label for="category">Categoría:</label>
                     <select id="category" name="category" required>
-                        <option value="Cerveza" {% if product.category == 'Cerveza' %}selected{% endif %}>Cerveza</option>
-                        <option value="Ron" {% if product.category == 'Ron' %}selected{% endif %}>Ron</option>
-                        <option value="Otro" {% if product.category not in ['Cerveza', 'Ron'] %}selected{% endif %}>Otro</option>
+                        <option value="Cerveza" {% if product.category=='Cerveza' %}selected{% endif %}>Cerveza</option>
+                        <option value="Ron" {% if product.category=='Ron' %}selected{% endif %}>Ron</option>
+                        <option value="Anís" {% if product.category=='Anís' %}selected{% endif %}>Anís</option>
+                        <option value="Whisky" {% if product.category=='Whisky' %}selected{% endif %}>Whisky</option>
+                        <option value="Misceláneo" {% if product.category=='Misceláneo' or product.category=='Otro'
+                            %}selected{% endif %}>Misceláneo</option>
                     </select>
                 </div>
-                
+
                 <div class="form-group">
                     <label for="presentation">Presentación:</label>
-                    <input type="text" id="presentation" name="presentation" value="{{ product.presentation }}" required>
+                    <input type="text" id="presentation" name="presentation" value="{{ product.presentation }}"
+                        required>
                 </div>
             </div>
-            
+
             <div class="form-row">
                 <div class="form-group">
                     <label for="quantity">Cantidad (unidades):</label>
                     <input type="number" id="quantity" name="quantity" value="{{ product.quantity }}" min="0" required>
                 </div>
-                
+
                 <div class="form-group">
                     <label for="price_usd">Precio (USD):</label>
                     <div class="price-input">
                         <span>$</span>
-                        <input type="number" id="price_usd" name="price_usd" step="0.01" value="{{ '%.2f'|format(product.price_usd) }}" min="0" required>
+                        <input type="number" id="price_usd" name="price_usd" step="0.01"
+                            value="{{ '%.2f'|format(product.price_usd) }}" min="0" required>
                     </div>
                 </div>
             </div>
-            
+
             <div class="form-actions">
                 <button type="submit" class="btn-save">
                     <i class="fas fa-save"></i> Guardar Cambios

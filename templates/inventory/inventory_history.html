@@ -3,16 +3,20 @@
 {% block title %}Histórico de Movimientos{% endblock %}
 
 {% block content %}
-<div class="sales-nav">
-    <a href="{{ url_for('sales') }}">Consumo Directo</a>
-    <a href="{{ url_for('view_tables') }}" class="{% if not is_bar_order %}active{% endif %}">Ordenes de Mesas</a>
-    <a href="{{ url_for('bar_orders') }}">Ordenes de Barra (Usuarios)</a>
-    <a href="{{ url_for('inventory_history') }}">Historico de Movimientos</a>
-    <a href="{{ url_for('sales_reports') }}">Reportes de Venta</a>
+<div class="inventory-nav">
+    <a href="{{ url_for('inventory_entry') }}" class="{{ 'active' if request.endpoint == 'inventory_entry' }}">Entrada
+        Mercancía</a>
+    <a href="{{ url_for('inventory_history') }}"
+        class="{{ 'active' if request.endpoint == 'inventory_history' }}">Histórico Movimientos</a>
+    {% if current_user.role == 'admin' %}
+    <a href="{{ url_for('inventory') }}" class="{{ 'active' if request.endpoint == 'inventory' }}">Inventario Real</a>
+    <a href="{{ url_for('create_product') }}" class="{{ 'active' if request.endpoint == 'create_product' }}">Agregar
+        Producto</a>
+    {% endif %}
 </div>
 <div class="container">
     <h2>Histórico Completo de Movimientos</h2>
-    
+
     <div class="table-responsive">
         <table class="table table-striped">
             <thead>
@@ -26,26 +30,27 @@
                 </tr>
             </thead>
             <tbody>
-                {% for mov in movements %}
+                {% for mov in movements_pagination.items %}
                 <tr>
                     <td>{{ mov.InventoryMovement.movement_date.strftime('%d/%m/%Y %H:%M') }}</td>
                     <td>{{ mov.Product.name }}</td>
                     <td>{{ mov.Product.category }}</td>
                     <td>
                         {% if mov.InventoryMovement.movement_type == 'entrada' %}
-                            <span style="color: green;">Entrada</span>
+                        <span style="color: green;">Entrada</span>
                         {% else %}
-                            <span style="color: red;">{{ mov.InventoryMovement.exit_type|capitalize }}</span>
+                        <span style="color: red;">{{ mov.InventoryMovement.exit_type|capitalize }}</span>
                         {% endif %}
                     </td>
                     <td>{{ mov.InventoryMovement.quantity }} und</td>
                     <td>
                         {{ mov.InventoryMovement.notes }}
                         {% if mov.InventoryMovement.movement_type == 'entrada' %}
-                            <br><small>
-                                {{ mov.InventoryMovement.distributor }} | 
-                                {{ mov.InventoryMovement.currency|upper }}{{ mov.InventoryMovement.purchase_price }}
-                            </small>
+                        <br><small>
+                            {{ mov.InventoryMovement.distributor or 'N/A' }} |
+                            {{ mov.InventoryMovement.currency|upper or 'USD' }}: {{ mov.InventoryMovement.purchase_price
+                            or '0.00' }}
+                        </small>
                         {% endif %}
                     </td>
                 </tr>
@@ -53,5 +58,66 @@
             </tbody>
         </table>
     </div>
+
+    <!-- Paginación -->
+    <div class="pagination-container">
+        <nav aria-label="Navegación de historial">
+            <ul class="pagination">
+                <li class="page-item {% if not movements_pagination.has_prev %}disabled{% endif %}">
+                    <a class="page-link"
+                        href="{{ url_for('inventory_history', page=movements_pagination.prev_num) if movements_pagination.has_prev else '#' }}">Anterior</a>
+                </li>
+
+                <li class="page-item active">
+                    <span class="page-link">Página {{ movements_pagination.page }} de {{ movements_pagination.pages
+                        }}</span>
+                </li>
+
+                <li class="page-item {% if not movements_pagination.has_next %}disabled{% endif %}">
+                    <a class="page-link"
+                        href="{{ url_for('inventory_history', page=movements_pagination.next_num) if movements_pagination.has_next else '#' }}">Siguiente</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
 </div>
+
+<style>
+    .pagination-container {
+        display: flex;
+        justify-content: center;
+        margin-top: 20px;
+        margin-bottom: 30px;
+    }
+
+    .pagination {
+        display: flex;
+        list-style: none;
+        padding: 0;
+        gap: 5px;
+    }
+
+    .page-item .page-link {
+        padding: 8px 16px;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        text-decoration: none;
+        color: #007bff;
+        background-color: #fff;
+    }
+
+    .page-item.disabled .page-link {
+        color: #6c757d;
+        pointer-events: none;
+        background-color: #fff;
+        border-color: #dee2e6;
+    }
+
+    .page-item.active .page-link {
+        z-index: 3;
+        color: #fff;
+        background-color: #007bff;
+        border-color: #007bff;
+    }
+</style>
 {% endblock %}

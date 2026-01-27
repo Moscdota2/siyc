@@ -4,49 +4,214 @@
 
 {% block content %}
 <div class="sales-nav">
-    <a href="{{ url_for('sales') }}">Consumo Directo</a>
-    <a href="{{ url_for('view_tables') }}" class="{% if not is_bar_order %}active{% endif %}">Ordenes de Mesas</a>
-    <a href="{{ url_for('bar_orders') }}">Ordenes de Barra (Usuarios)</a>
-    <a href="{{ url_for('inventory_history') }}">Historico de Movimientos</a>
-    <a href="{{ url_for('sales_reports') }}">Reportes de Venta</a>
-    <a href="{{ url_for('manage_exchange_rate') }}">Tasa Bolivares</a>
+    <a href="{{ url_for('sales') }}" class="{{ 'active' if request.endpoint == 'sales' }}">Consumo Directo</a>
+    <a href="{{ url_for('view_tables') }}"
+        class="{{ 'active' if request.endpoint == 'view_tables' or request.endpoint == 'view_order' }}">Ordenes de
+        Mesas</a>
+    <a href="{{ url_for('bar_orders') }}"
+        class="{{ 'active' if request.endpoint == 'bar_orders' or request.endpoint == 'view_bar_order' }}">Ordenes de
+        Barra</a>
+    <a href="{{ url_for('sales_reports') }}" class="{{ 'active' if request.endpoint == 'sales_reports' }}">Reportes</a>
+    <a href="{{ url_for('daily_closure') }}" class="{{ 'active' if request.endpoint == 'daily_closure' }}">Cierre de
+        Caja</a>
+    <a href="{{ url_for('manage_exchange_rate') }}"
+        class="{{ 'active' if request.endpoint == 'manage_exchange_rate' }}">Tasa BCV</a>
 </div>
-<h1>Mesas</h1>
+<div class="tables-container">
+    <div class="tables-header">
+        <h1>
+            <i class="fas fa-couch"></i>
+            Gestión de Mesas
+        </h1>
+        <div class="header-legend">
+            <span class="legend-item"><span class="dot status-disponible"></span> Disponible</span>
+            <span class="legend-item"><span class="dot status-ocupada"></span> Ocupada</span>
+        </div>
+    </div>
 
-<table>
-    <tr>
-        <th>Mesa</th>
-        <th>Estado</th>
-        <th>Acciones</th>
-    </tr>
-    {% for table in tables %}
-    <tr>
-        <td>Mesa {{ table.number }}</td>
-        <td>
-            {% if table.status == "disponible" %}
-                <span style="color: green;">Disponible</span>
-            {% elif table.status == "ocupada" %}
-                <span style="color: orange;">Ocupada</span>
-            {% else %}
-                <span style="color: red;">{{ table.status|capitalize }}</span>
-            {% endif %}
-        </td>
-        <td>
-            {% if table.status == "disponible" %}
-                <a href="{{ url_for('create_order', table_id=table.id) }}" class="btn btn-primary">
-                    Crear Pedido
+    <div class="tables-grid">
+        {% for table in tables %}
+        <div class="table-card status-{{ table.status }}">
+            <div class="table-header">
+                <h2>Mesa {{ table.number }}</h2>
+                <span class="status-badge">{{ table.status|capitalize }}</span>
+            </div>
+            <div class="table-body">
+                <i class="fas fa-utensils"></i>
+            </div>
+            <div class="table-footer">
+                {% if table.status == "disponible" %}
+                <a href="{{ url_for('create_order', table_id=table.id) }}" class="btn-action btn-primary">
+                    <i class="fas fa-plus"></i> Abrir Mesa
                 </a>
-            {% else %}
-                <a href="{{ url_for('view_order', table_id=table.id) }}" class="btn btn-secondary">
-                    Ver Pedido
+                {% else %}
+                <a href="{{ url_for('view_order', table_id=table.id) }}" class="btn-action btn-secondary">
+                    <i class="fas fa-eye"></i> Ver Pedido
                 </a>
-            {% endif %}
-        </td>
-    </tr>
-    {% endfor %}
-</table>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    .tables-container {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 20px;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .tables-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+    }
+
+    .tables-header h1 {
+        margin: 0;
+        font-size: 26px;
+        color: #1e293b;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .tables-header h1 i {
+        color: #3498db;
+    }
+
+    .header-legend {
+        display: flex;
+        gap: 20px;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        color: #64748b;
+        font-weight: 500;
+    }
+
+    .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+    }
+
+    .dot.status-disponible {
+        background: #10b981;
+    }
+
+    .dot.status-ocupada {
+        background: #f59e0b;
+    }
+
+    .tables-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 25px;
+    }
+
+    .table-card {
+        background: white;
+        border-radius: 20px;
+        padding: 25px;
+        text-align: center;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        transition: all 0.3s;
+        border: 2px solid transparent;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 200px;
+    }
+
+    .table-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+
+    .table-card.status-disponible {
+        border-bottom: 4px solid #10b981;
+    }
+
+    .table-card.status-ocupada {
+        border-bottom: 4px solid #f59e0b;
+    }
+
+    .table-header h2 {
+        margin: 0;
+        font-size: 20px;
+        color: #1e293b;
+    }
+
+    .status-badge {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-top: 8px;
+        padding: 4px 10px;
+        border-radius: 50px;
+    }
+
+    .status-disponible .status-badge {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .status-ocupada .status-badge {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .table-body {
+        font-size: 48px;
+        color: #f1f5f9;
+        margin: 20px 0;
+    }
+
+    .btn-action {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        padding: 10px;
+        border-radius: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+
+    .btn-primary {
+        background: #10b981;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: #059669;
+    }
+
+    .btn-secondary {
+        background: #3498db;
+        color: white;
+    }
+
+    .btn-secondary:hover {
+        background: #2980b9;
+    }
+
+    @media (max-width: 480px) {
+        .tables-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
 {% endblock %}
-
-
-
-

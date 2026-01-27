@@ -5,16 +5,23 @@
 {% block content %}
 <div class="sales-container">
     <h1>Registrar Consumo</h1>
-    
+
     <div class="sales-nav">
-        <a href="{{ url_for('sales') }}">Consumo Directo</a>
-        <a href="{{ url_for('view_tables') }}" class="{% if not is_bar_order %}active{% endif %}">Ordenes de Mesas</a>
-        <a href="{{ url_for('bar_orders') }}">Ordenes de Barra (Usuarios)</a>
-        <a href="{{ url_for('inventory_history') }}">Historico de Movimientos</a>
-        <a href="{{ url_for('sales_reports') }}">Reportes de Venta</a>
-        <a href="{{ url_for('manage_exchange_rate') }}">Tasa Bolivares</a>
+        <a href="{{ url_for('sales') }}" class="{{ 'active' if request.endpoint == 'sales' }}">Consumo Directo</a>
+        <a href="{{ url_for('view_tables') }}"
+            class="{{ 'active' if request.endpoint == 'view_tables' or request.endpoint == 'view_order' }}">Ordenes de
+            Mesas</a>
+        <a href="{{ url_for('bar_orders') }}"
+            class="{{ 'active' if request.endpoint == 'bar_orders' or request.endpoint == 'view_bar_order' }}">Ordenes
+            de Barra</a>
+        <a href="{{ url_for('sales_reports') }}"
+            class="{{ 'active' if request.endpoint == 'sales_reports' }}">Reportes</a>
+        <a href="{{ url_for('daily_closure') }}" class="{{ 'active' if request.endpoint == 'daily_closure' }}">Cierre de
+            Caja</a>
+        <a href="{{ url_for('manage_exchange_rate') }}"
+            class="{{ 'active' if request.endpoint == 'manage_exchange_rate' }}">Tasa BCV</a>
     </div>
-    
+
     <div class="sales-content">
         <form method="POST" action="{{ url_for('register_sale') }}" class="sales-form" id="salesForm">
             <div class="form-group">
@@ -22,70 +29,75 @@
                 <div class="toggle-group">
                     <input type="radio" id="type_mesa" name="sale_type" value="mesa" checked>
                     <label for="type_mesa">Mesa</label>
-                    
+
                     <input type="radio" id="type_barra" name="sale_type" value="barra">
                     <label for="type_barra">Barra</label>
                 </div>
             </div>
-            
+
             <div id="mesa_fields" class="sale-fields">
                 <div class="form-group">
                     <label for="table_id">Mesa:</label>
                     <select name="table_id" class="form-control">
                         {% for table in tables if table.status == 'disponible' %}
-                            <option value="{{ table.id }}">Mesa {{ table.number }}</option>
+                        <option value="{{ table.id }}">Mesa {{ table.number }}</option>
                         {% endfor %}
                     </select>
                 </div>
             </div>
-            
+
             <div id="barra_fields" class="sale-fields" style="display:none;">
                 <div class="form-group">
                     <label for="customer_name">Nombre Cliente:</label>
                     <input type="text" name="customer_name" class="form-control">
                 </div>
             </div>
-            
+
             <div class="product-selection">
                 <h3>Productos</h3>
                 <div id="product_items">
                     <div class="product-item">
                         <select name="product_id[]" class="form-control product-select" required>
                             <option value="">Seleccione un producto</option>
-                            
+
                             <!-- Productos individuales -->
                             <optgroup label="Productos Individuales">
                                 {% for product in products if not product.is_combo %}
-                                <option value="{{ product.id }}" 
-                                        data-price="{{ product.price_usd }}"
-                                        data-is-combo="false"
-                                        data-stock="{{ product.quantity }}">
-                                    {{ product.name }} (${{ "%.2f"|format(product.price_usd) }}) - Stock: {{ product.quantity }}
+                                <option value="{{ product.id }}" data-price="{{ product.price_usd }}"
+                                    data-price-unit="{{ product.price_unit_usd or product.price_usd }}"
+                                    data-price-half-tobo="{{ product.price_half_tobo_usd or 0 }}"
+                                    data-price-tobo="{{ product.price_tobo_usd or 0 }}"
+                                    data-price-half-box="{{ product.price_half_box_usd or 0 }}"
+                                    data-price-box="{{ product.price_box_usd or 0 }}" data-is-combo="false"
+                                    data-stock="{{ product.quantity or 0 }}">
+                                    {{ product.name }} (${{ "%.2f"|format(product.price_usd) }} / {{
+                                    "%.2f"|format(product.price_usd * current_rate) }} Bs) - Stock: {{
+                                    product.quantity or 0 }}
                                 </option>
                                 {% endfor %}
                             </optgroup>
-                            
+
                             <!-- Combos disponibles -->
                             <optgroup label="Servicios (Combos)">
                                 {% for product in products if product.is_combo and product.available_quantity > 0 %}
-                                <option value="{{ product.id }}" 
-                                        data-price="{{ product.price_usd }}"
-                                        data-is-combo="true"
-                                        data-stock="{{ product.available_quantity }}">
-                                    {{ product.name }} (${{ "%.2f"|format(product.price_usd) }})
+                                <option value="{{ product.id }}" data-price="{{ product.price_usd }}"
+                                    data-is-combo="true" data-stock="{{ product.available_quantity }}">
+                                    {{ product.name }} (${{ "%.2f"|format(product.price_usd) }} / {{
+                                    "%.2f"|format(product.price_usd * current_rate) }} Bs)
                                     - Disponibles: {{ product.available_quantity }}
                                     {% if product.combo_items %}
-                                        (Incluye: 
-                                        {% for item in product.combo_items %}
-                                            {% set item_product = products|selectattr("id", "equalto", item.product_id)|first %}
-                                            {{ item.quantity }}x {{ item_product.name if item_product else '???' }}{% if not loop.last %}, {% endif %}
-                                        {% endfor %})
+                                    (Incluye:
+                                    {% for item in product.combo_items %}
+                                    {% set item_product = products|selectattr("id", "equalto", item.product_id)|first %}
+                                    {{ item.quantity }}x {{ item_product.name if item_product else '???' }}{% if not
+                                    loop.last %}, {% endif %}
+                                    {% endfor %})
                                     {% endif %}
                                 </option>
                                 {% endfor %}
                             </optgroup>
                         </select>
-                        
+
                         <select name="exit_type[]" class="form-control exit-type-select">
                             <option value="individual">Unidad</option>
                             <option value="half_tobo">Medio Tobo (6)</option>
@@ -93,21 +105,22 @@
                             <option value="half_box">Media Caja (18)</option>
                             <option value="box">Caja (36)</option>
                         </select>
-                        
-                        <input type="number" name="quantity[]" min="1" value="1" class="form-control quantity-input" required>
+
+                        <input type="number" name="quantity[]" min="1" value="1" class="form-control quantity-input"
+                            required>
                         <button type="button" class="btn-remove">×</button>
                     </div>
                 </div>
                 <button type="button" id="add_product" class="btn-add">+ Agregar Producto</button>
             </div>
-            
+
             <div class="total-section">
-                <h4>Total: $<span id="total_amount">0.00</span></h4>
+                <h4>Total: $<span id="total_amount">0.00</span> / <span id="total_amount_bs">0.00</span> Bs</h4>
             </div>
-            
+
             <button type="submit" class="btn-submit">Crear Orden</button>
         </form>
-        
+
         <!-- Sección de previsualización -->
         <div id="sale_preview" style="display: none; margin-top: 30px;">
             <h3>Resumen de Venta</h3>
@@ -119,27 +132,27 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-     // Mostrar/ocultar campos según tipo de consumo
-    document.querySelectorAll('input[name="sale_type"]').forEach(radio => {
-        radio.addEventListener('change', function() {
-            document.querySelectorAll('.sale-fields').forEach(field => {
-                field.style.display = 'none';
-            });
-            
-            if (this.value === 'mesa') {
-                document.getElementById('mesa_fields').style.display = 'block';
-            } else if (this.value === 'barra') {
-                document.getElementById('barra_fields').style.display = 'block';
-            }
-        });
-    });
+    document.addEventListener('DOMContentLoaded', function () {
+        // Mostrar/ocultar campos según tipo de consumo
+        document.querySelectorAll('input[name="sale_type"]').forEach(radio => {
+            radio.addEventListener('change', function () {
+                document.querySelectorAll('.sale-fields').forEach(field => {
+                    field.style.display = 'none';
+                });
 
-    // Agregar más productos con el nuevo selector
-    document.getElementById('add_product').addEventListener('click', function() {
-        const newItem = document.createElement('div');
-        newItem.className = 'product-item';
-        newItem.innerHTML = `
+                if (this.value === 'mesa') {
+                    document.getElementById('mesa_fields').style.display = 'block';
+                } else if (this.value === 'barra') {
+                    document.getElementById('barra_fields').style.display = 'block';
+                }
+            });
+        });
+
+        // Agregar más productos con el nuevo selector
+        document.getElementById('add_product').addEventListener('click', function () {
+            const newItem = document.createElement('div');
+            newItem.className = 'product-item';
+            newItem.innerHTML = `
             <select name="product_id[]" class="form-control product-select" required>
                 <option value="">Seleccione un producto</option>
                 ${products.map(p => `
@@ -150,8 +163,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             data-price-tobo="${p.price_tobo_usd}"
                             data-price-half-box="${p.price_half_box_usd}"
                             data-price-box="${p.price_box_usd}"
-                            data-stock="${p.quantity}">
-                        ${p.name} ($${p.price_usd.toFixed(2)}) - Stock: ${p.quantity}
+                            data-stock="${p.available_quantity || p.quantity || 0}">
+                        ${p.name} ($${p.price_usd.toFixed(2)} / ${(p.price_usd * currentRate).toFixed(2)} Bs) - Stock: ${p.available_quantity || p.quantity || 0}
                     </option>
                 `).join('')}
             </select>
@@ -165,306 +178,260 @@ document.addEventListener('DOMContentLoaded', function() {
             <input type="number" name="quantity[]" min="1" value="1" class="form-control quantity-input" required>
             <button type="button" class="btn-remove">×</button>
         `;
-        document.getElementById('product_items').appendChild(newItem);
-        
-        // Agregar event listeners al nuevo elemento
-        addProductEventListeners(newItem);
-        calculateTotal();
-    });
+            document.getElementById('product_items').appendChild(newItem);
 
-    // Actualizar la interfaz cuando se selecciona un combo
-    document.addEventListener('change', function(e) {
-        if (e.target.classList.contains('product-select')) {
-            const selectedOption = e.target.selectedOptions[0];
-            const isCombo = selectedOption && selectedOption.dataset.isCombo === 'true';
-            const exitTypeSelect = e.target.closest('.product-item').querySelector('.exit-type-select');
-            
-            if (exitTypeSelect) {
-                exitTypeSelect.disabled = isCombo;
-                if (isCombo) {
-                    exitTypeSelect.value = 'individual';
-                }
-            }
-        }
-    });
-
-    // Función para agregar event listeners a un producto
-    function addProductEventListeners(productItem) {
-        const exitTypeSelect = productItem.querySelector('.exit-type-select');
-        const quantityInput = productItem.querySelector('.quantity-input');
-        const productSelect = productItem.querySelector('.product-select');
-        
-        // Cambiar cantidad según tipo seleccionado
-        exitTypeSelect.addEventListener('change', function() {
-            switch(this.value) {
-                case 'individual':
-                    quantityInput.value = 1;
-                    quantityInput.min = 1;
-                    break;
-                case 'half_tobo':
-                    quantityInput.value = 6;
-                    quantityInput.min = 6;
-                    break;
-                case 'tobo':
-                    quantityInput.value = 12;
-                    quantityInput.min = 12;
-                    break;
-                case 'half_box':
-                    quantityInput.value = 18;
-                    quantityInput.min = 18;
-                    break;
-                case 'box':
-                    quantityInput.value = 36;
-                    quantityInput.min = 36;
-                    break;
-            }
+            // Agregar event listeners al nuevo elemento
+            addProductEventListeners(newItem);
             calculateTotal();
         });
-        
-        // Cambiar tipo si se modifica manualmente la cantidad
-        quantityInput.addEventListener('change', function() {
-            const qty = parseInt(this.value);
-            if (qty % 6 === 0 && qty <= 36) {
-                if (qty === 6) exitTypeSelect.value = 'half_tobo';
-                else if (qty === 12) exitTypeSelect.value = 'tobo';
-                else if (qty === 18) exitTypeSelect.value = 'half_box';
-                else if (qty === 36) exitTypeSelect.value = 'box';
-            } else {
-                exitTypeSelect.value = 'individual';
-            }
-            calculateTotal();
-        });
-        
-        // Actualizar precios cuando cambia el producto
-        productSelect.addEventListener('change', function() {
-            calculateTotal();
-        });
-    }
 
-    // Eliminar producto
-    document.addEventListener('click', function(e) {
-        if (e.target.classList.contains('btn-remove')) {
-            e.target.parentNode.remove();
-            calculateTotal();
-        }
-    });
+        // Actualizar la interfaz cuando se selecciona un combo
+        document.addEventListener('change', function (e) {
+            if (e.target.classList.contains('product-select')) {
+                const selectedOption = e.target.selectedOptions[0];
+                const isCombo = selectedOption && selectedOption.dataset.isCombo === 'true';
+                const exitTypeSelect = e.target.closest('.product-item').querySelector('.exit-type-select');
 
-    // Función para calcular el total considerando los tipos de venta
-    function calculateTotal() {
-        let total = 0;
-        document.querySelectorAll('.product-item').forEach(item => {
-            const select = item.querySelector('.product-select');
-            const exitTypeSelect = item.querySelector('.exit-type-select');
-            const quantityInput = item.querySelector('.quantity-input');
-            
-            if (select && select.selectedOptions[0] && quantityInput) {
-                const isCombo = select.selectedOptions[0].dataset.isCombo === 'true';
-                const price = parseFloat(select.selectedOptions[0].dataset.price);
-                const quantity = parseInt(quantityInput.value) || 0;
-                
-                if (isCombo) {
-                    // Los combos siempre usan el precio fijo multiplicado por la cantidad
-                    total += price * quantity;
-                } else {
-                    // Lógica existente para productos individuales
-                    const exitType = exitTypeSelect.value;
-                    if (exitType === 'individual') {
-                        const tobos = Math.floor(quantity / 12);
-                        const remaining = quantity % 12;
-                        const halfTobos = Math.floor(remaining / 6);
-                        const units = remaining % 6;
-                        
-                        total += (tobos * parseFloat(select.selectedOptions[0].dataset.priceTobo)) + 
-                                (halfTobos * parseFloat(select.selectedOptions[0].dataset.priceHalfTobo)) + 
-                                (units * parseFloat(select.selectedOptions[0].dataset.priceUnit));
-                    } else {
-                        switch(exitType) {
-                            case 'half_tobo':
-                                total += parseFloat(select.selectedOptions[0].dataset.priceHalfTobo);
-                                break;
-                            case 'tobo':
-                                total += parseFloat(select.selectedOptions[0].dataset.priceTobo);
-                                break;
-                            case 'half_box':
-                                total += parseFloat(select.selectedOptions[0].dataset.priceHalfBox);
-                                break;
-                            case 'box':
-                                total += parseFloat(select.selectedOptions[0].dataset.priceBox);
-                                break;
-                        }
+                if (exitTypeSelect) {
+                    exitTypeSelect.disabled = isCombo;
+                    if (isCombo) {
+                        exitTypeSelect.value = 'individual';
                     }
                 }
             }
         });
-        
-        document.getElementById('total_amount').textContent = total.toFixed(2);
-    }
 
-    // Actualizar cantidad máxima según stock
-    function updateMaxQuantity(input) {
-        const productSelect = input.parentElement.querySelector('.product-select');
-        if (productSelect && productSelect.selectedOptions[0]) {
-            const maxStock = parseInt(productSelect.selectedOptions[0].dataset.stock);
-            input.setAttribute('max', maxStock);
-            if (parseInt(input.value) > maxStock) {
-                input.value = maxStock;
-            }
+        // Función para agregar event listeners a un producto
+        function addProductEventListeners(productItem) {
+            const exitTypeSelect = productItem.querySelector('.exit-type-select');
+            const quantityInput = productItem.querySelector('.quantity-input');
+            const productSelect = productItem.querySelector('.product-select');
+
+            // Cambiar cantidad según tipo seleccionado
+            exitTypeSelect.addEventListener('change', function () {
+                switch (this.value) {
+                    case 'individual':
+                        quantityInput.value = 1;
+                        quantityInput.min = 1;
+                        break;
+                    case 'half_tobo':
+                        quantityInput.value = 6;
+                        quantityInput.min = 6;
+                        break;
+                    case 'tobo':
+                        quantityInput.value = 12;
+                        quantityInput.min = 12;
+                        break;
+                    case 'half_box':
+                        quantityInput.value = 18;
+                        quantityInput.min = 18;
+                        break;
+                    case 'box':
+                        quantityInput.value = 36;
+                        quantityInput.min = 36;
+                        break;
+                }
+                calculateTotal();
+            });
+
+            // Cambiar tipo si se modifica manualmente la cantidad
+            quantityInput.addEventListener('change', function () {
+                const qty = parseInt(this.value);
+                if (qty % 6 === 0 && qty <= 36) {
+                    if (qty === 6) exitTypeSelect.value = 'half_tobo';
+                    else if (qty === 12) exitTypeSelect.value = 'tobo';
+                    else if (qty === 18) exitTypeSelect.value = 'half_box';
+                    else if (qty === 36) exitTypeSelect.value = 'box';
+                } else {
+                    exitTypeSelect.value = 'individual';
+                }
+                calculateTotal();
+            });
+
+            // Actualizar precios cuando cambia el producto
+            productSelect.addEventListener('change', function () {
+                calculateTotal();
+            });
         }
-    }
 
-    // Función para calcular el total
-    function calculateTotal() {
-        let total = 0;
-        document.querySelectorAll('.product-item').forEach(item => {
-            const select = item.querySelector('.product-select');
-            const quantityInput = item.querySelector('.quantity-input');
-            
-            if (select && select.selectedOptions[0] && quantityInput) {
-                const price = parseFloat(select.selectedOptions[0].dataset.price);
-                const quantity = parseInt(quantityInput.value) || 0;
-                total += price * quantity;
+        // Eliminar producto
+        document.addEventListener('click', function (e) {
+            if (e.target.classList.contains('btn-remove')) {
+                e.target.parentNode.remove();
+                calculateTotal();
             }
         });
-        
-        document.getElementById('total_amount').textContent = total.toFixed(2);
-    }
 
-    // Previsualizar venta
-    document.getElementById('preview_sale').addEventListener('click', function() {
-        const formData = new FormData(document.getElementById('salesForm'));
-        const saleType = formData.get('sale_type');
-        let previewHTML = '';
-        
-        if (saleType === 'mesa') {
-            const tableId = formData.get('table_id');
-            const table = tables.find(t => t.id == tableId);
-            previewHTML += `<p><strong>Mesa:</strong> ${table.number}</p>`;
-        } else {
-            const customerName = formData.get('customer_name') || 'Consumo en barra';
-            previewHTML += `<p><strong>Cliente:</strong> ${customerName}</p>`;
+        // Función para calcular el total considerando los tipos de venta
+        function calculateTotal() {
+            let total = 0;
+            document.querySelectorAll('.product-item').forEach(item => {
+                const select = item.querySelector('.product-select');
+                const exitTypeSelect = item.querySelector('.exit-type-select');
+                const quantityInput = item.querySelector('.quantity-input');
+
+                if (select && select.selectedOptions[0] && quantityInput) {
+                    const isCombo = select.selectedOptions[0].dataset.isCombo === 'true';
+                    const price = parseFloat(select.selectedOptions[0].dataset.price);
+                    const quantity = parseInt(quantityInput.value) || 0;
+
+                    if (isCombo) {
+                        // Los combos siempre usan el precio fijo multiplicado por la cantidad
+                        total += price * quantity;
+                    } else {
+                        // Lógica existente para productos individuales
+                        const exitType = exitTypeSelect.value;
+                        if (exitType === 'individual') {
+                            const tobos = Math.floor(quantity / 12);
+                            const remaining = quantity % 12;
+                            const halfTobos = Math.floor(remaining / 6);
+                            const units = remaining % 6;
+
+                            total += (tobos * parseFloat(select.selectedOptions[0].dataset.priceTobo)) +
+                                (halfTobos * parseFloat(select.selectedOptions[0].dataset.priceHalfTobo)) +
+                                (units * parseFloat(select.selectedOptions[0].dataset.priceUnit));
+                        } else {
+                            switch (exitType) {
+                                case 'half_tobo':
+                                    total += parseFloat(select.selectedOptions[0].dataset.priceHalfTobo);
+                                    break;
+                                case 'tobo':
+                                    total += parseFloat(select.selectedOptions[0].dataset.priceTobo);
+                                    break;
+                                case 'half_box':
+                                    total += parseFloat(select.selectedOptions[0].dataset.priceHalfBox);
+                                    break;
+                                case 'box':
+                                    total += parseFloat(select.selectedOptions[0].dataset.priceBox);
+                                    break;
+                            }
+                        }
+                    }
+                }
+            });
+
+            document.getElementById('total_amount').textContent = total.toFixed(2);
+            document.getElementById('total_amount_bs').textContent = (total * currentRate).toFixed(2);
         }
-        
-        previewHTML += `<h4>Productos:</h4><ul>`;
-        
-        const productIds = formData.getAll('product_id[]');
-        const quantities = formData.getAll('quantity[]');
-        let total = 0;
-        
-        productIds.forEach((productId, index) => {
-            const product = products.find(p => p.id == productId);
-            const quantity = quantities[index];
-            const subtotal = product.price_usd * quantity;
-            total += subtotal;
-            
-            previewHTML += `
-                <li>
-                    ${product.name} - ${quantity} x $${product.price_usd.toFixed(2)} = $${subtotal.toFixed(2)}
-                </li>
-            `;
+
+        // Actualizar cantidad máxima según stock
+        function updateMaxQuantity(input) {
+            const productSelect = input.parentElement.querySelector('.product-select');
+            if (productSelect && productSelect.selectedOptions[0]) {
+                const maxStock = parseInt(productSelect.selectedOptions[0].dataset.stock);
+                input.setAttribute('max', maxStock);
+                if (parseInt(input.value) > maxStock) {
+                    input.value = maxStock;
+                }
+            }
+        }
+
+        // Duplicate function removed
+
+        // Previsualizar venta
+        const previewBtn = document.getElementById('preview_sale');
+        if (previewBtn) {
+            previewBtn.addEventListener('click', function () {
+                // ... (rest of the code)
+            });
+        }
+
+        // Cancelar previsualización
+        document.getElementById('cancel_sale').addEventListener('click', function () {
+            document.getElementById('salesForm').style.display = 'block';
+            document.getElementById('sale_preview').style.display = 'none';
         });
-        
-        previewHTML += `</ul>`;
-        previewHTML += `<h4>Total: $${total.toFixed(2)}</h4>`;
-        
-        document.getElementById('preview_content').innerHTML = previewHTML;
-        document.getElementById('salesForm').style.display = 'none';
-        document.getElementById('sale_preview').style.display = 'block';
-    });
 
-    // Cancelar previsualización
-    document.getElementById('cancel_sale').addEventListener('click', function() {
-        document.getElementById('salesForm').style.display = 'block';
-        document.getElementById('sale_preview').style.display = 'none';
-    });
+        // Confirmar venta
+        document.getElementById('confirm_sale').addEventListener('click', function () {
+            document.getElementById('salesForm').submit();
+        });
 
-    // Confirmar venta
-    document.getElementById('confirm_sale').addEventListener('click', function() {
-        document.getElementById('salesForm').submit();
-    });
+        // Inicializar event listeners para el primer producto
+        document.querySelectorAll('.product-item').forEach(addProductEventListeners);
 
-    // Inicializar event listeners para el primer producto
-    document.querySelectorAll('.product-item').forEach(addProductEventListeners);
-    
-    // Inicializar
-    const tables = JSON.parse('{{ tables|tojson|safe }}');
-    const products = JSON.parse('{{ products|tojson|safe }}');
-    calculateTotal();
-    document.querySelectorAll('.quantity-input').forEach(updateMaxQuantity);
-});
+        // Inicializar
+        const tables = JSON.parse('{{ tables|tojson|safe }}');
+        const products = JSON.parse('{{ products|tojson|safe }}');
+        const currentRate = parseFloat('{{ current_rate }}');
+        calculateTotal();
+        document.querySelectorAll('.quantity-input').forEach(updateMaxQuantity);
+    });
 </script>
 
 <style>
     /* Estilos para el nuevo selector */
-.product-item {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 10px;
-    align-items: center;
-}
+    .product-item {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+        align-items: center;
+    }
 
-.product-item select, 
-.product-item input {
-    flex: 1;
-}
+    .product-item select,
+    .product-item input {
+        flex: 1;
+    }
 
-.exit-type-select {
-    max-width: 150px;
-}
+    .exit-type-select {
+        max-width: 150px;
+    }
 
-.quantity-input {
-    max-width: 80px;
-}
+    .quantity-input {
+        max-width: 80px;
+    }
 
-.btn-remove {
-    background: #dc3545;
-    color: white;
-    border: none;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    cursor: pointer;
-}
+    .btn-remove {
+        background: #dc3545;
+        color: white;
+        border: none;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        cursor: pointer;
+    }
 
-.btn-add {
-    background: #28a745;
-    color: white;
-    border: none;
-    padding: 8px 15px;
-    border-radius: 4px;
-    cursor: pointer;
-}
-.btn-confirm {
-    background-color: #28a745;
-    color: white;
-    padding: 10px 20px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    margin-right: 10px;
-}
+    .btn-add {
+        background: #28a745;
+        color: white;
+        border: none;
+        padding: 8px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+    }
 
-.btn-cancel {
-    background-color: #dc3545;
-    color: white;
-    padding: 10px 20px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-}
+    .btn-confirm {
+        background-color: #28a745;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-right: 10px;
+    }
 
-#sale_preview {
-    background: #f8f9fa;
-    padding: 20px;
-    border-radius: 5px;
-    border: 1px solid #ddd;
-}
+    .btn-cancel {
+        background-color: #dc3545;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
 
-.combo-details {
-    margin-top: 5px;
-    padding-left: 15px;
-    border-left: 2px solid #ddd;
-    font-size: 0.9em;
-    color: #666;
-}
+    #sale_preview {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 5px;
+        border: 1px solid #ddd;
+    }
+
+    .combo-details {
+        margin-top: 5px;
+        padding-left: 15px;
+        border-left: 2px solid #ddd;
+        font-size: 0.9em;
+        color: #666;
+    }
 </style>
 {% endblock %}
