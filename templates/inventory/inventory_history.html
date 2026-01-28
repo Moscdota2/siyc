@@ -4,13 +4,13 @@
 
 {% block content %}
 <div class="inventory-nav">
-    <a href="{{ url_for('inventory_entry') }}" class="{{ 'active' if request.endpoint == 'inventory_entry' }}">Entrada
+    <a href="{{ url_for('inventory.inventory_entry') }}" class="{{ 'active' if request.endpoint == 'inventory_entry' }}">Entrada
         Mercancía</a>
-    <a href="{{ url_for('inventory_history') }}"
-        class="{{ 'active' if request.endpoint == 'inventory_history' }}">Histórico Movimientos</a>
+    <a href="{{ url_for('inventory.inventory_history') }}"
+        class="{{ 'active' if request.endpoint == 'inventory.inventory_history' }}">Histórico Movimientos</a>
     {% if current_user.role == 'admin' %}
-    <a href="{{ url_for('inventory') }}" class="{{ 'active' if request.endpoint == 'inventory' }}">Inventario Real</a>
-    <a href="{{ url_for('create_product') }}" class="{{ 'active' if request.endpoint == 'create_product' }}">Agregar
+    <a href="{{ url_for('inventory.inventory') }}" class="{{ 'active' if request.endpoint == 'inventory' }}">Inventario Real</a>
+    <a href="{{ url_for('inventory.create_product') }}" class="{{ 'active' if request.endpoint == 'create_product' }}">Agregar
         Producto</a>
     {% endif %}
 </div>
@@ -65,7 +65,7 @@
             <ul class="pagination">
                 <li class="page-item {% if not movements_pagination.has_prev %}disabled{% endif %}">
                     <a class="page-link"
-                        href="{{ url_for('inventory_history', page=movements_pagination.prev_num) if movements_pagination.has_prev else '#' }}">Anterior</a>
+                        href="{{ url_for('inventory.inventory_history', page=movements_pagination.prev_num) if movements_pagination.has_prev else '#' }}">Anterior</a>
                 </li>
 
                 <li class="page-item active">
@@ -75,7 +75,7 @@
 
                 <li class="page-item {% if not movements_pagination.has_next %}disabled{% endif %}">
                     <a class="page-link"
-                        href="{{ url_for('inventory_history', page=movements_pagination.next_num) if movements_pagination.has_next else '#' }}">Siguiente</a>
+                        href="{{ url_for('inventory.inventory_history', page=movements_pagination.next_num) if movements_pagination.has_next else '#' }}">Siguiente</a>
                 </li>
             </ul>
         </nav>

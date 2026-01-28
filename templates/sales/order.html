@@ -10,12 +10,19 @@ Orden Mesa {{ order.table.number }}
 
 {% block content %}
 <div class="sales-nav">
-    <a href="{{ url_for('sales') }}">Consumo Directo</a>
-    <a href="{{ url_for('view_tables') }}" class="{% if not is_bar_order %}active{% endif %}">Ordenes de Mesas</a>
-    <a href="{{ url_for('bar_orders') }}">Ordenes de Barra (Usuarios)</a>
-    <a href="{{ url_for('inventory_history') }}">Historico de Movimientos</a>
-    <a href="{{ url_for('sales_reports') }}">Reportes de Venta</a>
-    <a href="{{ url_for('manage_exchange_rate') }}">Tasa Bolivares</a>
+    <a href="{{ url_for('sales.sales') }}" class="{{ 'active' if request.endpoint == 'sales.sales' }}">Consumo
+        Directo</a>
+    <a href="{{ url_for('sales.view_tables') }}"
+        class="{{ 'active' if request.endpoint == 'sales.view_tables' or request.endpoint == 'sales.view_order' }}">Ordenes
+        de Mesas</a>
+    <a href="{{ url_for('sales.bar_orders') }}"
+        class="{{ 'active' if request.endpoint == 'sales.bar_orders' or request.endpoint == 'sales.view_bar_order' }}">Ordenes
+        de Barra</a>
+    <a href="{{ url_for('inventory.inventory_history') }}">Historico de Movimientos</a>
+    <a href="{{ url_for('sales.sales_reports') }}"
+        class="{{ 'active' if request.endpoint == 'sales.sales_reports' }}">Reportes de Venta</a>
+    <a href="{{ url_for('sales.manage_exchange_rate') }}"
+        class="{{ 'active' if request.endpoint == 'sales.manage_exchange_rate' }}">Tasa Bolivares</a>
 </div>
 <div class="order-container">
     <div class="order-header">
@@ -132,7 +139,7 @@ Orden Mesa {{ order.table.number }}
     <div class="add-products">
         <h3>Agregar Más Productos</h3>
         <form
-            action="{% if is_bar_order %}{{ url_for('add_product_to_bar_order', order_id=order.id) }}{% else %}{{ url_for('add_product', table_id=table.id) }}{% endif %}"
+            action="{% if is_bar_order %}{{ url_for('sales.add_product_to_bar_order', order_id=order.id) }}{% else %}{{ url_for('sales.add_product', table_id=table.id) }}{% endif %}"
             method="POST">
             <div class="form-row">
                 <select name="product_id" class="form-control" id="product_select" required>
@@ -202,7 +209,7 @@ Orden Mesa {{ order.table.number }}
     <div class="payment-card-section">
         <h3><i class="fas fa-credit-card"></i> Registrar Pago</h3>
         <form method="POST" id="paymentForm"
-            action="{% if is_bar_order %}{{ url_for('close_bar_order', order_id=order.id) }}{% else %}{{ url_for('close_order', table_id=table.id) }}{% endif %}">
+            action="{% if is_bar_order %}{{ url_for('sales.close_bar_order', order_id=order.id) }}{% else %}{{ url_for('sales.close_order', table_id=table.id) }}{% endif %}">
             <input type="hidden" name="order_id" value="{{ order.id }}">
 
             <div class="payment-grid">
@@ -260,7 +267,7 @@ Orden Mesa {{ order.table.number }}
     {% endif %}
     {% endif %}
 
-    <a href="{% if is_bar_order %}{{ url_for('sales') }}{% else %}{{ url_for('view_tables') }}{% endif %}"
+    <a href="{% if is_bar_order %}{{ url_for('sales.sales') }}{% else %}{{ url_for('sales.view_tables') }}{% endif %}"
         class="btn btn-back">
         {% if is_bar_order %}Volver a Ventas{% else %}Volver a Mesas{% endif %}
     </a>

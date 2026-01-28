@@ -7,23 +7,26 @@
     <h1>Registrar Consumo</h1>
 
     <div class="sales-nav">
-        <a href="{{ url_for('sales') }}" class="{{ 'active' if request.endpoint == 'sales' }}">Consumo Directo</a>
-        <a href="{{ url_for('view_tables') }}"
-            class="{{ 'active' if request.endpoint == 'view_tables' or request.endpoint == 'view_order' }}">Ordenes de
+        <a href="{{ url_for('sales.sales') }}" class="{{ 'active' if request.endpoint == 'sales.sales' }}">Consumo
+            Directo</a>
+        <a href="{{ url_for('sales.view_tables') }}"
+            class="{{ 'active' if request.endpoint == 'sales.view_tables' or request.endpoint == 'sales.view_order' }}">Ordenes
+            de
             Mesas</a>
-        <a href="{{ url_for('bar_orders') }}"
-            class="{{ 'active' if request.endpoint == 'bar_orders' or request.endpoint == 'view_bar_order' }}">Ordenes
+        <a href="{{ url_for('sales.bar_orders') }}"
+            class="{{ 'active' if request.endpoint == 'sales.bar_orders' or request.endpoint == 'sales.view_bar_order' }}">Ordenes
             de Barra</a>
-        <a href="{{ url_for('sales_reports') }}"
-            class="{{ 'active' if request.endpoint == 'sales_reports' }}">Reportes</a>
-        <a href="{{ url_for('daily_closure') }}" class="{{ 'active' if request.endpoint == 'daily_closure' }}">Cierre de
+        <a href="{{ url_for('sales.sales_reports') }}"
+            class="{{ 'active' if request.endpoint == 'sales.sales_reports' }}">Reportes</a>
+        <a href="{{ url_for('sales.daily_closure') }}"
+            class="{{ 'active' if request.endpoint == 'sales.daily_closure' }}">Cierre de
             Caja</a>
-        <a href="{{ url_for('manage_exchange_rate') }}"
-            class="{{ 'active' if request.endpoint == 'manage_exchange_rate' }}">Tasa BCV</a>
+        <a href="{{ url_for('sales.manage_exchange_rate') }}"
+            class="{{ 'active' if request.endpoint == 'sales.manage_exchange_rate' }}">Tasa BCV</a>
     </div>
 
     <div class="sales-content">
-        <form method="POST" action="{{ url_for('register_sale') }}" class="sales-form" id="salesForm">
+        <form method="POST" action="{{ url_for('sales.register_sale') }}" class="sales-form" id="salesForm">
             <div class="form-group">
                 <label>Tipo de Consumo:</label>
                 <div class="toggle-group">

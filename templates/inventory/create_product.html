@@ -4,13 +4,13 @@
 
 {% block content %}
 <div class="inventory-nav">
-    <a href="{{ url_for('inventory_entry') }}" class="{{ 'active' if request.endpoint == 'inventory_entry' }}">Entrada
+    <a href="{{ url_for('inventory.inventory_entry') }}" class="{{ 'active' if request.endpoint == 'inventory_entry' }}">Entrada
         Mercancía</a>
-    <a href="{{ url_for('inventory_history') }}"
-        class="{{ 'active' if request.endpoint == 'inventory_history' }}">Histórico Movimientos</a>
+    <a href="{{ url_for('inventory.inventory_history') }}"
+        class="{{ 'active' if request.endpoint == 'inventory.inventory_history' }}">Histórico Movimientos</a>
     {% if current_user.role == 'admin' %}
-    <a href="{{ url_for('inventory') }}" class="{{ 'active' if request.endpoint == 'inventory' }}">Inventario Real</a>
-    <a href="{{ url_for('create_product') }}" class="{{ 'active' if request.endpoint == 'create_product' }}">Agregar
+    <a href="{{ url_for('inventory.inventory') }}" class="{{ 'active' if request.endpoint == 'inventory' }}">Inventario Real</a>
+    <a href="{{ url_for('inventory.create_product') }}" class="{{ 'active' if request.endpoint == 'create_product' }}">Agregar
         Producto</a>
     {% endif %}
 </div>
@@ -54,6 +54,6 @@
     </div>
 
     <button type="submit" class="btn btn-primary">Guardar</button>
-    <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancelar</a>
+    <a href="{{ url_for('sales.index') }}" class="btn btn-secondary">Cancelar</a>
 </form>
 {% endblock %}

@@ -16,11 +16,11 @@
         <div class="dropdown">
             <button class="dropbtn">Inventario</button>
             <div class="dropdown-content">
-                <a href="{{ url_for('inventory_history') }}" class="active">Historico</a>
-                <a href="{{ url_for('inventory_entry') }}">Registrar Entrada</a>
+                <a href="{{ url_for('inventory.inventory_history') }}" class="active">Historico</a>
+                <a href="{{ url_for('inventory.inventory_entry') }}">Registrar Entrada</a>
                 {% if current_user.role == 'admin' %}
-                <a href="{{ url_for('create_product') }}">Agregar Producto</a>
-                <a href="{{ url_for('inventory') }}">Inventario</a>
+                <a href="{{ url_for('inventory.create_product') }}">Agregar Producto</a>
+                <a href="{{ url_for('inventory.inventory') }}">Inventario</a>
                 {% endif %}
             </div>
         </div>
@@ -28,11 +28,11 @@
             <button class="dropbtn">Ventas</button>
             <div class="dropdown-content">
                 <a href="/sales">Registrar Consumo</a>
-                <a href="{{ url_for('view_tables') }}">Mesas</a>
-                <a href="{{ url_for('bar_orders') }}">Órdenes de Barra</a>
-                <a href="{{ url_for('sales_reports') }}">Reportes de Venta</a>
+                <a href="{{ url_for('sales.view_tables') }}">Mesas</a>
+                <a href="{{ url_for('sales.bar_orders') }}">Órdenes de Barra</a>
+                <a href="{{ url_for('sales.sales_reports') }}">Reportes de Venta</a>
                 {% if current_user.role == 'admin' %}
-                <a href="{{ url_for('daily_closure') }}">Cierre de Caja</a>
+                <a href="{{ url_for('sales.daily_closure') }}">Cierre de Caja</a>
                 {% endif %}
             </div>
         </div>

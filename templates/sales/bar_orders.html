@@ -4,18 +4,23 @@
 
 {% block content %}
 <div class="sales-nav">
-    <a href="{{ url_for('sales') }}" class="{{ 'active' if request.endpoint == 'sales' }}">Consumo Directo</a>
-    <a href="{{ url_for('view_tables') }}"
-        class="{{ 'active' if request.endpoint == 'view_tables' or request.endpoint == 'view_order' }}">Ordenes de
+    <a href="{{ url_for('sales.sales') }}" class="{{ 'active' if request.endpoint == 'sales.sales' }}">Consumo
+        Directo</a>
+    <a href="{{ url_for('sales.view_tables') }}"
+        class="{{ 'active' if request.endpoint == 'sales.view_tables' or request.endpoint == 'sales.view_order' }}">Ordenes
+        de
         Mesas</a>
-    <a href="{{ url_for('bar_orders') }}"
-        class="{{ 'active' if request.endpoint == 'bar_orders' or request.endpoint == 'view_bar_order' }}">Ordenes de
+    <a href="{{ url_for('sales.bar_orders') }}"
+        class="{{ 'active' if request.endpoint == 'sales.bar_orders' or request.endpoint == 'sales.view_bar_order' }}">Ordenes
+        de
         Barra</a>
-    <a href="{{ url_for('sales_reports') }}" class="{{ 'active' if request.endpoint == 'sales_reports' }}">Reportes</a>
-    <a href="{{ url_for('daily_closure') }}" class="{{ 'active' if request.endpoint == 'daily_closure' }}">Cierre de
+    <a href="{{ url_for('sales.sales_reports') }}"
+        class="{{ 'active' if request.endpoint == 'sales.sales_reports' }}">Reportes</a>
+    <a href="{{ url_for('sales.daily_closure') }}"
+        class="{{ 'active' if request.endpoint == 'sales.daily_closure' }}">Cierre de
         Caja</a>
-    <a href="{{ url_for('manage_exchange_rate') }}"
-        class="{{ 'active' if request.endpoint == 'manage_exchange_rate' }}">Tasa BCV</a>
+    <a href="{{ url_for('sales.manage_exchange_rate') }}"
+        class="{{ 'active' if request.endpoint == 'sales.manage_exchange_rate' }}">Tasa BCV</a>
 </div>
 <div class="orders-container">
     <div class="orders-header">
@@ -45,7 +50,7 @@
                 </div>
             </div>
             <div class="card-footer">
-                <a href="{{ url_for('view_bar_order', order_id=order.id) }}" class="btn-view">
+                <a href="{{ url_for('sales.view_bar_order', order_id=order.id) }}" class="btn-view">
                     Atender Orden <i class="fas fa-chevron-right"></i>
                 </a>
             </div>
@@ -59,7 +64,7 @@
     </div>
 </div>
 
-<a href="{{ url_for('sales') }}" class="btn btn-secondary">
+<a href="{{ url_for('sales.sales') }}" class="btn btn-secondary">
     Volver a Ventas
 </a>
 
