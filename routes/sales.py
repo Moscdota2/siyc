@@ -45,26 +45,88 @@ def manage_exchange_rate():
 @sales_bp.route('/tables')
 @login_required
 def view_tables():
-    """Display all tables and their statuses."""
+    """Display all tables and their statuses with lazy cleanup for empty orders."""
     tables = Table.query.order_by(Table.number).all()
+    
+    # Lazy Cleanup: If a table is 'ocupada' but has no items in its active order, reset it.
+    # This happens when a waiter opens a table but doesn't add anything.
+    cleaned = False
+    for table in tables:
+        if table.status == "ocupada":
+            active_order = Order.query.filter_by(table_id=table.id, status="pendiente").first()
+            if not active_order or not active_order.products:
+                table.status = "disponible"
+                if active_order:
+                    db.session.delete(active_order)
+                cleaned = True
+    
+    if cleaned:
+        db.session.commit()
+        # Refresh table list after cleanup
+        tables = Table.query.order_by(Table.number).all()
+        
     return render_template('sales/tables.html', tables=tables)
 
-@sales_bp.route('/create_table', methods=['GET', 'POST'])
+@sales_bp.route('/manage_tables')
+@admin_required
+def manage_tables():
+    """Admin view to manage tables."""
+    tables = Table.query.order_by(Table.number).all()
+    return render_template('sales/manage_tables.html', tables=tables)
+
+@sales_bp.route('/create_table', methods=['POST'])
 @admin_required
 def create_table():
     """Create a new table."""
-    if request.method == 'POST':
-        try:
-            table_number = int(request.form['number'])
+    try:
+        table_number = request.form['number']
+        if Table.query.filter_by(number=table_number).first():
+            flash(f'La mesa {table_number} ya existe', 'warning')
+        else:
             new_table = Table(number=table_number)
             db.session.add(new_table)
             db.session.commit()
             flash('Mesa creada exitosamente', 'success')
-            return redirect(url_for('sales.view_tables'))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al crear mesa: {str(e)}', 'danger')
+    return redirect(url_for('sales.manage_tables'))
+
+@sales_bp.route('/edit_table/<int:table_id>', methods=['POST'])
+@admin_required
+def edit_table(table_id):
+    """Edit table number/name."""
+    table = Table.query.get_or_404(table_id)
+    try:
+        new_number = request.form['number']
+        existing = Table.query.filter_by(number=new_number).first()
+        if existing and existing.id != table_id:
+            flash(f'Esa mesa ya existe', 'warning')
+        else:
+            table.number = new_number
+            db.session.commit()
+            flash('Mesa actualizada', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error: {str(e)}', 'danger')
+    return redirect(url_for('sales.manage_tables'))
+
+@sales_bp.route('/delete_table/<int:table_id>')
+@admin_required
+def delete_table(table_id):
+    """Delete a table if it's not occupied."""
+    table = Table.query.get_or_404(table_id)
+    if table.status == "ocupada":
+        flash('No se puede eliminar una mesa ocupada', 'danger')
+    else:
+        try:
+            db.session.delete(table)
+            db.session.commit()
+            flash('Mesa eliminada', 'success')
         except Exception as e:
             db.session.rollback()
-            flash(f'Error al crear mesa: {str(e)}', 'danger')
-    return render_template('create_table.html')
+            flash(f'Error: {str(e)}', 'danger')
+    return redirect(url_for('sales.manage_tables'))
 
 @sales_bp.route('/create_order/<int:table_id>')
 @login_required

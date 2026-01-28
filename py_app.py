@@ -1,4 +1,4 @@
-from flask import Flask, redirect, url_for
+from flask import Flask, redirect, url_for, render_template
 from flask_login import LoginManager
 from py_exchange import db, init_exchange_rate
 from py_models import User, Table, PaymentMethod, create_initial_products
@@ -42,7 +42,7 @@ login_manager.login_view = 'auth.login'
 @login_manager.user_loader
 def load_user(user_id):
     """Load user by ID for Flask-Login."""
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 # Register Blueprints
 app.register_blueprint(auth_bp)
@@ -54,6 +54,11 @@ app.register_blueprint(sales_bp)
 def home():
     """Redirect root to the main sales dashboard."""
     return redirect(url_for('sales.index'))
+
+@app.errorhandler(403)
+def forbidden_error(error):
+    """Render custom 403 Forbidden page."""
+    return render_template('403.html'), 403
 
 if __name__ == '__main__':
     with app.app_context():

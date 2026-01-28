@@ -1,0 +1,191 @@
+{% extends 'base.html' %}
+
+{% block title %}Administrar Mesas{% endblock %}
+
+{% block content %}
+<div class="sales-nav">
+    <a href="{{ url_for('sales.sales') }}">Consumo Directo</a>
+    <a href="{{ url_for('sales.view_tables') }}" class="active">Ordenes de Mesas</a>
+    <a href="{{ url_for('sales.bar_orders') }}">Ordenes de Barra</a>
+    <a href="{{ url_for('sales.sales_reports') }}">Reportes</a>
+</div>
+
+<div class="admin-container">
+    <div class="admin-header">
+        <h1><i class="fas fa-tools"></i> Configuración de Mesas</h1>
+        <a href="{{ url_for('sales.view_tables') }}" class="btn btn-back">
+            <i class="fas fa-arrow-left"></i> Volver a Mesas
+        </a>
+    </div>
+
+    <div class="admin-grid">
+        <!-- Agregar Mesa -->
+        <div class="admin-card add-card">
+            <h3><i class="fas fa-plus-circle"></i> Nueva Mesa</h3>
+            <form action="{{ url_for('sales.create_table') }}" method="POST" class="inline-form">
+                <div class="form-group">
+                    <label>Número/Nombre de Mesa</label>
+                    <input type="text" name="number" class="form-control" placeholder="Ej: 10, VIP, 1-2" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Crear Mesa</button>
+            </form>
+        </div>
+
+        <!-- Listado de Mesas -->
+        <div class="admin-card list-card">
+            <h3><i class="fas fa-list"></i> Mesas Existentes</h3>
+            <div class="table-list">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Número/Nombre</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for table in tables %}
+                        <tr>
+                            <td>
+                                <form action="{{ url_for('sales.edit_table', table_id=table.id) }}" method="POST"
+                                    class="edit-form">
+                                    <input type="text" name="number" value="{{ table.number }}" class="form-control sm"
+                                        required>
+                                    <button type="submit" class="btn-icon text-success" title="Guardar"><i
+                                            class="fas fa-check"></i></button>
+                                </form>
+                            </td>
+                            <td>
+                                <span class="status-badge {{ table.status }}">{{ table.status|capitalize }}</span>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('sales.delete_table', table_id=table.id) }}"
+                                    class="btn-icon text-danger"
+                                    onclick="return confirm('¿Eliminar mesa {{ table.number }}?')" title="Eliminar">
+                                    <i class="fas fa-trash"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .admin-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .admin-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+    }
+
+    .admin-grid {
+        display: grid;
+        grid-template-columns: 1fr 2fr;
+        gap: 30px;
+    }
+
+    .admin-card {
+        background: white;
+        padding: 25px;
+        border-radius: 20px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+
+    .admin-card h3 {
+        margin-top: 0;
+        margin-bottom: 20px;
+        font-size: 18px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #1e293b;
+    }
+
+    .admin-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .admin-table th {
+        text-align: left;
+        padding: 12px;
+        border-bottom: 2px solid #f1f5f9;
+        color: #64748b;
+        font-size: 13px;
+        text-transform: uppercase;
+    }
+
+    .admin-table td {
+        padding: 12px;
+        border-bottom: 1px solid #f1f5f9;
+        vertical-align: middle;
+    }
+
+    .edit-form {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .form-control.sm {
+        width: 80px;
+        padding: 5px 10px;
+    }
+
+    .btn-icon {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 5px;
+        font-size: 16px;
+        transition: transform 0.2s;
+    }
+
+    .btn-icon:hover {
+        transform: scale(1.2);
+    }
+
+    .status-badge {
+        padding: 4px 10px;
+        border-radius: 50px;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    .status-badge.disponible {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .status-badge.ocupada {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .btn-back {
+        background: #f1f5f9;
+        color: #475569;
+        text-decoration: none;
+        padding: 8px 16px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    @media (max-width: 768px) {
+        .admin-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}

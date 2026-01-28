@@ -48,7 +48,7 @@ class Product(db.Model):
 
 class Table(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    number = db.Column(db.Integer, unique=True, nullable=False)
+    number = db.Column(db.String(20), unique=True, nullable=False)
     status = db.Column(db.String(20), nullable=False, default="disponible")
     orders = db.relationship('Order', backref='table', lazy=True)
 
