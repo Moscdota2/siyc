@@ -52,6 +52,23 @@ app.register_blueprint(sales_bp)
 # Ensure DB and seed products at app creation so products are present
 with app.app_context():
     db.create_all()
+    # Ensure lightweight schema migrations for older DB files
+    def ensure_db_schema():
+        try:
+            # Check if the inventory_movement table has the closure_id column
+            result = db.session.execute("PRAGMA table_info('inventory_movement')").fetchall()
+            cols = [r[1] for r in result]
+            if 'closure_id' not in cols:
+                try:
+                    db.session.execute('ALTER TABLE inventory_movement ADD COLUMN closure_id INTEGER')
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+        except Exception:
+            # If PRAGMA fails (table missing), ignore; create_all() will create tables
+            pass
+
+    ensure_db_schema()
     try:
         # Always attempt to seed initial products (function is idempotent
         # and will only add missing entries). This ensures that deleting
