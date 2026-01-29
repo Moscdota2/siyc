@@ -14,8 +14,10 @@
         class="{{ 'active' if request.endpoint == 'sales.bar_orders' or request.endpoint == 'sales.view_bar_order' }}">Ordenes
         de
         Barra</a>
+    {% if current_user.role in ['admin', 'manager'] %}
     <a href="{{ url_for('sales.sales_reports') }}"
         class="{{ 'active' if request.endpoint == 'sales.sales_reports' }}">Reportes</a>
+    {% endif %}
     <a href="{{ url_for('sales.daily_closure') }}"
         class="{{ 'active' if request.endpoint == 'sales.daily_closure' }}">Cierre de
         Caja</a>

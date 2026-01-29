@@ -30,10 +30,31 @@
         <div class="main-column">
             <h2>Ventas Recientes</h2>
             <div class="summary-card info-card">
-                <p><strong>Total Pendiente por Cuadrar:</strong> ${{ "%.2f"|format(pending_total_sales) }}</p>
-                <a href="{{ url_for('sales.daily_closure') }}" class="btn btn-sm btn-outline-primary">Ir a Cierre de
-                    Caja</a>
+                <div class="summary-item">
+                    <p><strong>Total Ventas Pendientes:</strong> ${{ "%.2f"|format(pending_total_sales) }}</p>
+                    <small>Se incluirán en el próximo cierre de caja.</small>
+                </div>
+                <div class="summary-item" style="text-align: right;">
+                    <a href="{{ url_for('sales.daily_closure') }}" class="btn btn-sm btn-outline-primary">Ir a Cierre de
+                        Caja</a>
+                </div>
             </div>
+
+            {% if pending_adjustments %}
+            <div class="summary-card adjustment-card">
+                <div class="summary-item">
+                    <p><strong>Ajustes de Inventario (Pendientes):</strong> {{ pending_adjustments|length }}</p>
+                    <small>Regalías y pérdidas registradas hoy.</small>
+                </div>
+                <div class="summary-item">
+                    <ul class="adj-mini-list">
+                        {% for adj in pending_adjustments[:3] %}
+                        <li>{{ adj.quantity }}x {{ adj.product.name }} ({{ adj.exit_type }})</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
 
             <table class="sales-table">
                 <thead>
@@ -126,6 +147,33 @@
         align-items: center;
         background: #e7f3ff;
         border-left: 4px solid #007bff;
+        padding: 20px;
+        border-radius: 12px;
+    }
+
+    .adjustment-card {
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #fff1f2;
+        border-left: 4px solid #f43f5e;
+        padding: 20px;
+        border-radius: 12px;
+    }
+
+    .adj-mini-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        font-size: 11px;
+        color: #9f1239;
+    }
+
+    .summary-item small {
+        display: block;
+        color: #64748b;
+        margin-top: 4px;
     }
 
     .badge {

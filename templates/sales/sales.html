@@ -16,8 +16,10 @@
         <a href="{{ url_for('sales.bar_orders') }}"
             class="{{ 'active' if request.endpoint == 'sales.bar_orders' or request.endpoint == 'sales.view_bar_order' }}">Ordenes
             de Barra</a>
+        {% if current_user.role in ['admin', 'manager'] %}
         <a href="{{ url_for('sales.sales_reports') }}"
             class="{{ 'active' if request.endpoint == 'sales.sales_reports' }}">Reportes</a>
+        {% endif %}
         <a href="{{ url_for('sales.daily_closure') }}"
             class="{{ 'active' if request.endpoint == 'sales.daily_closure' }}">Cierre de
             Caja</a>
@@ -294,19 +296,17 @@
                                 (halfTobos * parseFloat(select.selectedOptions[0].dataset.priceHalfTobo)) +
                                 (units * parseFloat(select.selectedOptions[0].dataset.priceUnit));
                         } else {
-                            switch (exitType) {
-                                case 'half_tobo':
-                                    total += parseFloat(select.selectedOptions[0].dataset.priceHalfTobo);
-                                    break;
-                                case 'tobo':
-                                    total += parseFloat(select.selectedOptions[0].dataset.priceTobo);
-                                    break;
-                                case 'half_box':
-                                    total += parseFloat(select.selectedOptions[0].dataset.priceHalfBox);
-                                    break;
-                                case 'box':
-                                    total += parseFloat(select.selectedOptions[0].dataset.priceBox);
-                                    break;
+                            const prices = {
+                                'half_tobo': parseFloat(select.selectedOptions[0].dataset.priceHalfTobo),
+                                'tobo': parseFloat(select.selectedOptions[0].dataset.priceTobo),
+                                'half_box': parseFloat(select.selectedOptions[0].dataset.priceHalfBox),
+                                'box': parseFloat(select.selectedOptions[0].dataset.priceBox)
+                            };
+                            const mults = { 'half_tobo': 6, 'tobo': 12, 'half_box': 18, 'box': 36 };
+                            const price = prices[exitType];
+                            const mult = mults[exitType];
+                            if (price && mult) {
+                                total += (quantity / mult) * price;
                             }
                         }
                     }

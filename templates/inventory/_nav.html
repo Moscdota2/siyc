@@ -1,0 +1,9 @@
+<div class="inventory-nav">
+    <a href="{{ url_for('inventory.inventory_entry') }}" class="{{ 'active' if request.endpoint == 'inventory.inventory_entry' else '' }}">Entrada Mercancía</a>
+    <a href="{{ url_for('inventory.inventory_history') }}" class="{{ 'active' if request.endpoint == 'inventory.inventory_history' else '' }}">Histórico Movimientos</a>
+    {% if current_user.role == 'admin' %}
+    <a href="{{ url_for('inventory.inventory') }}" class="{{ 'active' if request.endpoint == 'inventory.inventory' else '' }}">Inventario Real</a>
+    <a href="{{ url_for('inventory.create_product') }}" class="{{ 'active' if request.endpoint == 'inventory.create_product' else '' }}">Agregar Producto</a>
+    {% endif %}
+    <a href="{{ url_for('inventory.register_adjustment') }}" class="{{ 'active' if request.endpoint == 'inventory.register_adjustment' else '' }}">Regalías / Pérdidas</a>
+</div>

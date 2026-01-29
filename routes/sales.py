@@ -224,7 +224,8 @@ def _add_product_to_order(order, product_id, quantity, exit_type):
             'half_box': 18,
             'box': 36
         }
-        actual_units = quantity * unit_multiplier.get(exit_type, 1)
+        # La cantidad recibida ya representa las unidades totales (e.g. 6 para medio tobo)
+        actual_units = quantity
         if product.quantity < actual_units:
             return False, f'Stock insuficiente de {product.name}'
 
@@ -232,7 +233,6 @@ def _add_product_to_order(order, product_id, quantity, exit_type):
     if product.is_combo:
         subtotal = product.price_usd * quantity
     elif product.category == 'Cerveza' and exit_type == 'individual':
-        # Calcular basado en el total de cervezas individuales en la orden
         cervezas_actuales = sum(d.quantity for d in order.products if d.product.category == "Cerveza" and d.exit_type == 'individual')
         total_cervezas = cervezas_actuales + quantity
         subtotal = calcular_precio_cervezas(total_cervezas, product) - calcular_precio_cervezas(cervezas_actuales, product)
@@ -243,24 +243,28 @@ def _add_product_to_order(order, product_id, quantity, exit_type):
             'half_box': product.price_half_box_usd,
             'box': product.price_box_usd
         }
-        subtotal = prices.get(exit_type, quantity * (product.price_unit_usd or product.price_usd))
+        # Determinar base_price con fallback seguro a 0.0
+        base_price = prices.get(exit_type) or product.price_unit_usd or product.price_usd or 0.0
+        try:
+            base_price = float(base_price)
+        except Exception:
+            base_price = 0.0
+        mult = unit_multiplier.get(exit_type, 1) if exit_type != 'individual' else 1
+        # Si es un pack, el precio es por pack, calculamos cuántos packs hay en la cantidad de unidades
+        if mult > 0:
+            subtotal = (quantity / mult) * base_price
+        else:
+            subtotal = quantity * base_price
 
     # Registrar detalle
     detail = OrderDetail(
         order_id=order.id, 
         product_id=product.id, 
-        quantity=quantity if product.is_combo or product.category != 'Cerveza' or exit_type != 'individual' else quantity,
-        # Nota: quantity en OrderDetail representa las unidades vendidas segun el etype
+        quantity=quantity,
         subtotal=subtotal, 
         exit_type=exit_type
     )
     
-    # Ajustar cantidad real para productos no combo (en OrderDetail guardamos lo solicitado, 
-    # pero en stock descontamos unidades reales)
-    if not product.is_combo:
-         unit_mult = {'half_tobo': 6, 'tobo': 12, 'half_box': 18, 'box': 36}.get(exit_type, 1)
-         detail.quantity = quantity * unit_mult
-
     order.total_price += subtotal
     
     # Procesar inventario
@@ -275,7 +279,7 @@ def _add_product_to_order(order, product_id, quantity, exit_type):
                 notes=f'Componente combo {product.name} (Orden #{order.id})'
             ))
     else:
-        product.quantity -= detail.quantity
+        product.quantity -= actual_units
         db.session.add(InventoryMovement(
             product_id=product.id, user_id=current_user.id, movement_type='salida',
             quantity=detail.quantity, exit_type=exit_type, is_locked=True,
@@ -312,7 +316,7 @@ def add_product(table_id):
     return redirect(url_for('sales.view_order', table_id=table_id))
 
 @sales_bp.route('/close_order/<int:table_id>', methods=['POST'])
-@admin_required
+@login_required
 def close_order(table_id):
     """Process payment and close a table order."""
     active_order = Order.query.filter_by(table_id=table_id, status="pendiente").first_or_404()
@@ -321,10 +325,15 @@ def close_order(table_id):
     payment_amount = float(request.form['payment_amount'])
     current_rate = get_current_rate()
     
+    # Normalize amounts (avoid division by zero)
     payment_amount_bs = payment_amount if payment_currency == 'bs' else payment_amount * current_rate
-    payment_amount_usd = payment_amount if payment_currency == 'usd' else payment_amount / current_rate
-    
-    if payment_currency == 'bs' and payment_amount_bs < active_order.total_price * current_rate:
+    payment_amount_usd = payment_amount if payment_currency == 'usd' else (payment_amount / current_rate if current_rate else 0.0)
+
+    # Comparación con tolerancia para evitar fallos por redondeo
+    required_bs = round(active_order.total_price * current_rate, 2)
+    paid_bs = round(payment_amount_bs, 2)
+    # Permitimos una pequeña diferencia (1 centavo) al comparar
+    if payment_currency == 'bs' and (paid_bs + 0.01) < required_bs:
         flash('Monto insuficiente', 'danger')
         return redirect(url_for('sales.view_order', table_id=table_id))
     
@@ -400,7 +409,8 @@ def sales():
             'quantity': p.quantity,
             'is_combo': False,
             'available_quantity': p.quantity,
-            'category': p.category
+            'category': p.category,
+            'cost_usd': float(p.cost_per_unit_usd or 0)
         })
     
     # Agregar combos
@@ -425,6 +435,7 @@ def register_sale():
     if request.method == 'POST':
         try:
             sale_type = request.form['sale_type']
+            order_type = request.form.get('order_type', 'venta')
             product_ids = request.form.getlist('product_id[]')
             quantities = request.form.getlist('quantity[]')
             exit_types = request.form.getlist('exit_type[]') or ['individual'] * len(product_ids)
@@ -439,17 +450,25 @@ def register_sale():
                 new_order = Order(
                     table_id=table_id,
                     status="pendiente",
+                    order_type=order_type,
                     waiter_id=current_user.id
                 )
                 table.status = "ocupada"
                 db.session.add(table)
             else:
                 customer_name = request.form.get('customer_name', 'Consumo en barra')
+                if order_type != 'venta':
+                    # For regalia/perdida, we auto-close it as 'pagado' so it shows in reports
+                    # We also prepend the type to the customer name for clarity
+                    customer_name = f"[{order_type.upper()}] {customer_name}"
+                    
                 new_order = Order(
                     customer_name=customer_name,
-                    status="pendiente",
+                    status="pagado" if order_type != 'venta' else "pendiente",
+                    order_type=order_type,
                     waiter_id=current_user.id,
-                    table_id=None
+                    table_id=None,
+                    closed_at=datetime.now() if order_type != 'venta' else None
                 )
 
             db.session.add(new_order)
@@ -522,8 +541,18 @@ def register_sale():
                             'box': 36
                         }
                         
-                        actual_units = quantity * unit_multiplier.get(exit_type, 1)
-                        subtotal = prices.get(exit_type, quantity * (product.price_unit_usd or product.price_usd))
+                        actual_units = quantity
+                        
+                        # Valuation logic: use cost if it's not a standard sale
+                        if order_type != 'venta':
+                            # Use cost_per_unit_usd, fallback to a small default or half of price if 0
+                            cost = product.cost_per_unit_usd or (product.price_unit_usd * 0.5) if product.price_unit_usd else 0.5
+                            base_price = cost
+                        else:
+                            base_price = prices.get(exit_type, product.price_unit_usd or product.price_usd) or 0.0
+                            
+                        mult = unit_multiplier.get(exit_type, 1) if exit_type != 'individual' else 1
+                        subtotal = (quantity / mult) * base_price if mult > 0 else quantity * base_price
                         
                         if product.quantity < actual_units:
                             db.session.rollback()
@@ -544,14 +573,28 @@ def register_sale():
                             user_id=current_user.id,
                             movement_type='salida',
                             quantity=actual_units,
-                            exit_type=exit_type,
-                            notes=f'Venta (Orden #{new_order.id})',
+                            exit_type=order_type if order_type != 'venta' else exit_type,
+                            notes=f'{order_type.capitalize()} (Orden #{new_order.id})',
                             is_locked=True
                         ))
 
             if total_cervezas > 0:
-                beer_subtotal = calcular_precio_cervezas(total_cervezas, cerveza_ref)
-                total += beer_subtotal
+                # Distribuir el subtotal de cervezas entre los detalles individuales
+                beer_details = OrderDetail.query.filter_by(order_id=new_order.id, exit_type='individual').order_by(OrderDetail.id).all()
+                prev_count = 0
+                for detail in beer_details:
+                    qty = detail.quantity
+                    # Subtotal incremental para este bloque de cervezas
+                    sub = calcular_precio_cervezas(prev_count + qty, cerveza_ref) - calcular_precio_cervezas(prev_count, cerveza_ref)
+                    try:
+                        detail.subtotal = float(sub)
+                    except Exception:
+                        detail.subtotal = 0.0
+                    db.session.add(detail)
+                    total += detail.subtotal
+                    prev_count += qty
+
+                # Registrar movimiento de salida total para cervezas
                 cerveza_ref.quantity -= total_cervezas
                 db.session.add(InventoryMovement(
                     product_id=cerveza_ref.id,
@@ -643,7 +686,7 @@ def add_product_to_bar_order(order_id):
     return redirect(url_for('sales.view_bar_order', order_id=order_id))
 
 @sales_bp.route('/close_bar_order/<int:order_id>', methods=['POST'])
-@admin_required
+@login_required
 def close_bar_order(order_id):
     """Close a bar order (payment)."""
     order = Order.query.get_or_404(order_id)
@@ -670,16 +713,24 @@ def close_bar_order(order_id):
 
 @sales_bp.route('/sales_reports')
 @login_required
+@manager_or_admin_required
 def sales_reports():
     """View sales history and reports."""
     completed_orders = Order.query.filter_by(status="pagado").order_by(Order.closed_at.desc()).all()
     closures = DailyClosure.query.order_by(DailyClosure.date.desc()).all()
     pending_total_sales = sum(o.total_price for o in Order.query.filter_by(status="pagado", closure_id=None).all())
     
+    # Get recent adjustments (regalías/pérdidas) not yet closed
+    pending_adjustments = InventoryMovement.query.filter(
+        InventoryMovement.exit_type.in_(['regalia', 'perdida']),
+        InventoryMovement.closure_id == None
+    ).all()
+    
     return render_template('sales/sales_reports.html', 
                          orders=completed_orders,
                          closures=closures,
                          pending_total_sales=pending_total_sales,
+                         pending_adjustments=pending_adjustments,
                          current_rate=get_current_rate())
 
 @sales_bp.route('/daily_closure', methods=['GET', 'POST'])
@@ -689,6 +740,12 @@ def daily_closure():
     pending_orders = Order.query.filter_by(status="pagado", closure_id=None).all()
     total_usd = sum(o.payment_amount_usd or 0 for o in pending_orders)
     total_bs = sum(o.payment_amount_bs or 0 for o in pending_orders)
+    
+    # Pendientes de inventario
+    pending_movements = InventoryMovement.query.filter(
+        InventoryMovement.exit_type.in_(['regalia', 'perdida']),
+        InventoryMovement.closure_id == None
+    ).all()
     
     if request.method == 'POST':
         try:
@@ -702,8 +759,13 @@ def daily_closure():
             )
             db.session.add(closure)
             db.session.flush()
+            
             for o in pending_orders:
                 o.closure_id = closure.id
+            
+            for m in pending_movements:
+                m.closure_id = closure.id
+                
             db.session.commit()
             flash('Cierre realizado exitosamente', 'success')
             return redirect(url_for('sales.sales_reports'))

@@ -20,6 +20,7 @@ def build():
     added_data = [
         ('templates', 'templates'),
         ('static', 'static'),
+        ('instance', 'instance'),
     ]
     
     # Construir el comando de PyInstaller
@@ -31,12 +32,21 @@ def build():
         '--clean',
     ]
     
-    # Agregar las carpetas de datos
+    # PyInstaller on Windows expects ';' as path separator for --add-data,
+    # on *nix it's ':'. Use the appropriate sep for the current platform.
+    sep = ';' if os.name == 'nt' else ':'
     for src, dest in added_data:
-        params.append('--add-data=%s%s%s' % (src, os.pathsep, dest))
+        params.append(f"--add-data={src}{sep}{dest}")
+
+    # Ensure the current directory is on the import path
+    params.append('--paths=.')
     
     # Ejecutar PyInstaller
-    PyInstaller.__main__.run(params)
+    try:
+        PyInstaller.__main__.run(params)
+    except Exception as e:
+        print('Error al ejecutar PyInstaller:', e)
+        raise
     
     print("\n" + "="*50)
     print(f"¡Listo! El ejecutable se encuentra en la carpeta 'dist/{app_name}.exe'")

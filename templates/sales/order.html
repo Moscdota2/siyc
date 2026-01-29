@@ -19,8 +19,10 @@ Orden Mesa {{ order.table.number }}
         class="{{ 'active' if request.endpoint == 'sales.bar_orders' or request.endpoint == 'sales.view_bar_order' }}">Ordenes
         de Barra</a>
     <a href="{{ url_for('inventory.inventory_history') }}">Historico de Movimientos</a>
+    {% if current_user.role in ['admin', 'manager'] %}
     <a href="{{ url_for('sales.sales_reports') }}"
         class="{{ 'active' if request.endpoint == 'sales.sales_reports' }}">Reportes de Venta</a>
+    {% endif %}
     <a href="{{ url_for('sales.manage_exchange_rate') }}"
         class="{{ 'active' if request.endpoint == 'sales.manage_exchange_rate' }}">Tasa Bolivares</a>
 </div>
@@ -205,7 +207,7 @@ Orden Mesa {{ order.table.number }}
             </div>
         </form>
     </div>
-    {% if current_user.role == 'admin' %}
+    {% if current_user.role in ['admin', 'manager', 'staff'] %}
     <div class="payment-card-section">
         <h3><i class="fas fa-credit-card"></i> Registrar Pago</h3>
         <form method="POST" id="paymentForm"

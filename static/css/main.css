@@ -218,6 +218,11 @@ tr.low-stock {
     color: #856404;
 }
 
+/* Utilidades */
+.text-danger {
+    color: #ef4444 !important;
+}
+
 /* Dashboard */
 .dashboard {
     background-color: white;

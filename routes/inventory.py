@@ -89,16 +89,23 @@ def update_product(id):
 @inventory_bp.route('/delete_product/<int:id>')
 @admin_required
 def delete_product(id):
-    """Delete a product and its history."""
+    """Reset product quantities (do NOT remove the product record).
+
+    This is safer for 'reset' operations from the UI: remove historical
+    inventory movements for the product and set `quantity` and
+    `box_quantity` to zero, keeping the product metadata intact.
+    """
     product = Product.query.get_or_404(id)
     try:
+        # Remove movement history but preserve product entry
         InventoryMovement.query.filter_by(product_id=id).delete()
-        db.session.delete(product)
+        product.quantity = 0
+        product.box_quantity = 0
         db.session.commit()
-        flash('Producto eliminado exitosamente', 'success')
+        flash('Producto reseteado: cantidades puestas a 0 y movimientos eliminados', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al eliminar producto: {str(e)}', 'danger')
+        flash(f'Error al resetear producto: {str(e)}', 'danger')
     return redirect(url_for('inventory.inventory'))
 
 @inventory_bp.route('/inventory_entry', methods=['GET', 'POST'])
@@ -119,29 +126,43 @@ def inventory_entry():
             units_per_box = 36
         else:
             units_per_box = 1
-        
+
         units = int(boxes * units_per_box)
         total_usd_investment = 0.0
-        
-        if currency == 'bs':
-            current_rate = get_current_rate()
-            if current_rate > 0:
+
+        # If the user provided an explicit purchase_price, prefer it (convert from BS if needed)
+        if purchase_price and purchase_price > 0:
+            if currency == 'bs':
+                current_rate = get_current_rate()
+                if current_rate <= 0:
+                    flash("Error: Tasa de cambio no disponible o es cero.", "danger")
+                    return redirect(url_for('inventory.inventory_entry'))
+                # purchase_price is expressed in BS; convert entire total to USD
+                total_usd_investment = purchase_price / current_rate
+            else:
+                # purchase_price already in USD (treated as total for the whole entry)
+                total_usd_investment = purchase_price
+        else:
+            # Fallback: use configured per-box / per-unit defaults
+            if currency == 'bs':
+                current_rate = get_current_rate()
+                if current_rate > 0:
+                    if product_type == 'cerveza':
+                        usd_price_per_box = 20.80 if distributor == 'polar' else 19.50
+                        total_usd_investment = boxes * usd_price_per_box
+                    else:
+                        usd_price_per_unit = purchase_price / (units * current_rate) if units > 0 else 0
+                        total_usd_investment = usd_price_per_unit * units
+                else:
+                    flash("Error: Tasa de cambio no disponible o es cero.", "danger")
+                    return redirect(url_for('inventory.inventory_entry'))
+            else:
                 if product_type == 'cerveza':
-                    usd_price_per_box = 20.80 if distributor == 'polar' else 19.50
+                    usd_price_per_box = 17.00 if distributor == 'polar' else 19.00
                     total_usd_investment = boxes * usd_price_per_box
                 else:
-                    usd_price_per_unit = purchase_price / (units * current_rate)
+                    usd_price_per_unit = purchase_price / units if units > 0 else 0
                     total_usd_investment = usd_price_per_unit * units
-            else:
-                flash("Error: Tasa de cambio no disponible o es cero.", "danger")
-                return redirect(url_for('inventory.inventory_entry'))
-        else:
-            if product_type == 'cerveza':
-                usd_price_per_box = 17.00 if distributor == 'polar' else 19.00
-                total_usd_investment = boxes * usd_price_per_box
-            else:
-                usd_price_per_unit = purchase_price / units
-                total_usd_investment = usd_price_per_unit * units
         
         product.quantity += units
         if product_type == 'cerveza':
@@ -210,53 +231,42 @@ def edit_movement(movement_id):
             flash(f'Error al actualizar: {str(e)}', 'danger')
     return render_template('edit_movement.html', movement=movement)
 
-@inventory_bp.route('/inventory_exit', methods=['GET', 'POST'])
+@inventory_bp.route('/register_adjustment', methods=['GET', 'POST'])
 @login_required
-def inventory_exit():
-    """Handle manual stock exits."""
+def register_adjustment():
+    """Register losses (pérdidas) or giveaways (regalías)."""
     if request.method == 'POST':
-        product_id = request.form['product_id']
-        exit_type = request.form['exit_type']
-        product = Product.query.get_or_404(product_id)
-        
-        if product.category == 'Cerveza':
-            qty_map = {'individual': 1, 'tobo': 12, 'media_caja': 18, 'caja': 36}
-            quantity = qty_map.get(exit_type, 0)
-        elif product.category == 'Ron':
-            qty_map = {'individual': 1, 'media_caja': 3, 'caja': 6}
-            quantity = qty_map.get(exit_type, 0)
-        else:
-            quantity = 1
-        
-        if quantity == 0:
-            flash('Tipo de salida inválido', 'danger')
-            return redirect(url_for('inventory.inventory_exit'))
-            
-        if product.quantity < quantity:
-            flash(f'Stock insuficiente. Disponible: {product.quantity}', 'danger')
-            return redirect(url_for('inventory.inventory_exit'))
-        
-        product.quantity -= quantity
-        if exit_type in ['caja', 'media_caja']:
-            product.box_quantity -= (1 if exit_type == 'caja' else 0.5)
-        
-        movement = InventoryMovement(
-            product_id=product_id,
-            user_id=current_user.id,
-            movement_type='salida',
-            quantity=quantity,
-            exit_type=exit_type,
-            is_locked=(current_user.role != 'admin'),
-            notes=f'Salida manual por {current_user.username}'
-        )
         try:
+            product_id = request.form['product_id']
+            quantity = int(request.form['quantity'])
+            adj_type = request.form['adj_type'] # 'regalia' or 'perdida'
+            notes = request.form.get('notes', '')
+            
+            product = Product.query.get_or_404(product_id)
+            
+            if product.quantity < quantity:
+                flash(f'Stock insuficiente. Disponible: {product.quantity}', 'danger')
+                return redirect(url_for('inventory.register_adjustment'))
+            
+            product.quantity -= quantity
+            
+            movement = InventoryMovement(
+                product_id=product_id,
+                user_id=current_user.id,
+                movement_type='salida',
+                quantity=quantity,
+                exit_type=adj_type,
+                notes=f"{adj_type.capitalize()}: {notes} (por {current_user.username})",
+                is_locked=True
+            )
+            
             db.session.add(movement)
             db.session.commit()
-            flash(f'Salida registrada: {quantity} unidades', 'success')
+            flash(f'Ajuste registrado ({adj_type}): {quantity} unidades de {product.name}', 'success')
+            return redirect(url_for('inventory.inventory'))
         except Exception as e:
             db.session.rollback()
-            flash(f'Error al registrar: {str(e)}', 'danger')
-        return redirect(url_for('inventory.inventory_exit'))
-    
+            flash(f'Error al registrar ajuste: {str(e)}', 'danger')
+            
     products = Product.query.filter(Product.quantity > 0).all()
-    return render_template('inventory_exit.html', products=products)
+    return render_template('inventory/register_adjustment.html', products=products)

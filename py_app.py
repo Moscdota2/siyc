@@ -1,7 +1,7 @@
 from flask import Flask, redirect, url_for, render_template
 from flask_login import LoginManager
 from py_exchange import db, init_exchange_rate
-from py_models import User, Table, PaymentMethod, create_initial_products
+from py_models import User, Table, PaymentMethod, Product, create_initial_products
 import os
 import sys
 
@@ -49,6 +49,20 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(inventory_bp)
 app.register_blueprint(sales_bp)
 
+# Ensure DB and seed products at app creation so products are present
+with app.app_context():
+    db.create_all()
+    try:
+        # Always attempt to seed initial products (function is idempotent
+        # and will only add missing entries). This ensures that deleting
+        # individual product rows does not permanently remove the default
+        # catalog.
+        create_initial_products()
+        db.session.commit()
+    except Exception:
+        # If seeding fails, don't crash app import; will attempt on run
+        pass
+
 # Root redirect to sales dashboard
 @app.route('/')
 def home():
@@ -64,6 +78,13 @@ if __name__ == '__main__':
     with app.app_context():
         # Ensure database tables exist
         db.create_all()
+
+        # Ensure initial products are seeded (idempotent)
+        try:
+            create_initial_products()
+            db.session.commit()
+        except Exception:
+            pass
 
         # Create initial data if the database is empty
         if not PaymentMethod.query.first():

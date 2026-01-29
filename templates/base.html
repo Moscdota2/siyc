@@ -16,11 +16,12 @@
         <div class="dropdown">
             <button class="dropbtn">Inventario</button>
             <div class="dropdown-content">
-                <a href="{{ url_for('inventory.inventory_history') }}" class="active">Historico</a>
+                <a href="{{ url_for('inventory.inventory_history') }}">Historico</a>
                 <a href="{{ url_for('inventory.inventory_entry') }}">Registrar Entrada</a>
+                <a href="{{ url_for('inventory.register_adjustment') }}">Regalías / Pérdidas</a>
                 {% if current_user.role == 'admin' %}
-                <a href="{{ url_for('inventory.create_product') }}">Agregar Producto</a>
-                <a href="{{ url_for('inventory.inventory') }}">Inventario</a>
+                <a href="{{ url_for('inventory.create_product') }}">Nuevo Producto</a>
+                <a href="{{ url_for('inventory.inventory') }}">Inventario Completo</a>
                 {% endif %}
             </div>
         </div>
@@ -30,9 +31,13 @@
                 <a href="/sales">Registrar Consumo</a>
                 <a href="{{ url_for('sales.view_tables') }}">Mesas</a>
                 <a href="{{ url_for('sales.bar_orders') }}">Órdenes de Barra</a>
+                {% if current_user.role in ['admin', 'manager'] %}
                 <a href="{{ url_for('sales.sales_reports') }}">Reportes de Venta</a>
+                {% endif %}
                 {% if current_user.role == 'admin' %}
                 <a href="{{ url_for('sales.daily_closure') }}">Cierre de Caja</a>
+                <hr>
+                <a href="{{ url_for('auth.admin_db') }}" style="color: #ef4444;">Mantenimiento DB</a>
                 {% endif %}
             </div>
         </div>

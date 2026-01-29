@@ -3,7 +3,9 @@
 {% block title %}Editar {{ product.name }}{% endblock %}
 
 {% block content %}
-<h1>Editar Producto</h1>
+{% include 'inventory/_nav.html' %}
+
+ <h1>Editar Producto</h1>
 <form method="POST">
     <div class="form-group">
         <label for="name">Nombre:</label>

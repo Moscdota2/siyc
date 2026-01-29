@@ -351,3 +351,55 @@
         flex-direction: column;
     }
 }
+
+/* Estilos para la vista de Registrar Ajuste (ajustados y aislados) */
+.adjustment-container {
+    max-width: 720px;
+    margin: 40px auto;
+    padding: 0 20px;
+    box-sizing: border-box;
+}
+
+.adjustment-card {
+    background: #ffffff;
+    padding: 36px 28px;
+    border-radius: 20px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
+    border: 1px solid #eef2f6;
+}
+
+.adjustment-card h1 {
+    font-size: 22px;
+    margin: 0 0 10px 0;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.adjustment-card .description {
+    color: #6b7280;
+    margin-bottom: 18px;
+}
+
+.adjustment-card .form-group label {
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: 6px;
+    display: block;
+}
+
+.adjustment-card .form-actions {
+    margin-top: 18px;
+}
+
+.adjustment-card .form-actions .btn {
+    padding: 12px 18px;
+}
+
+/* Asegurar que estas reglas no sobreescriban .inventory-nav */
+.adjustment-container .inventory-nav,
+.adjustment-card .inventory-nav {
+    all: unset;
+}
+

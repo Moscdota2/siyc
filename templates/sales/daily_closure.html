@@ -119,6 +119,37 @@
             {% endfor %}
         </tbody>
     </table>
+
+    {% if adjustments %}
+    <h2 style="margin-top: 40px; color: #dc2626;"><i class="fas fa-archive"></i> Ajustes de Inventario
+        (Regalías/Pérdidas)</h2>
+    <table class="sales-table">
+        <thead>
+            <tr>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Tipo</th>
+                <th>Observaciones</th>
+                <th>Fecha</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for adj in adjustments %}
+            <tr>
+                <td>{{ adj.product.name }}</td>
+                <td>{{ adj.quantity }}</td>
+                <td>
+                    <span class="badge {% if adj.exit_type == 'regalia' %}badge-info{% else %}badge-danger{% endif %}">
+                        {{ adj.exit_type|upper }}
+                    </span>
+                </td>
+                <td>{{ adj.notes }}</td>
+                <td>{{ adj.movement_date.strftime('%H:%M') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
     {% else %}
     <div class="alert alert-info">
         No hay órdenes pagadas pendientes por cerrar.

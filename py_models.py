@@ -57,6 +57,7 @@ class Order(db.Model):
     table_id = db.Column(db.Integer, db.ForeignKey('table.id'), nullable=True)
     total_price = db.Column(db.Float, nullable=False, default=0.0)
     status = db.Column(db.String(20), nullable=False, default="pendiente")
+    order_type = db.Column(db.String(20), default="venta") # 'venta', 'regalia', 'perdida'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     closed_at = db.Column(db.DateTime, nullable=True)
     products = db.relationship('OrderDetail', backref='order', lazy=True)
@@ -100,6 +101,8 @@ class InventoryMovement(db.Model):
     is_locked = db.Column(db.Boolean, default=False)
     locked_by_admin = db.Column(db.Boolean, default=False)
     total_usd_investment = db.Column(db.Float)
+    closure_id = db.Column(db.Integer, db.ForeignKey('daily_closure.id'), nullable=True)
+    closure = db.relationship('DailyClosure', backref='movements')
 
 class PaymentMethod(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -445,8 +448,21 @@ def calcular_precio_cervezas(total_cervezas, referencia_producto):
     half_tobos = remaining // 6
     units = remaining % 6
 
-    subtotal = (tobos * referencia_producto.price_tobo_usd) + \
-               (half_tobos * referencia_producto.price_half_tobo_usd) + \
-               (units * referencia_producto.price_unit_usd)
+    # Seguridad: asegurarse que los precios no sean None
+    try:
+        price_tobo = float(getattr(referencia_producto, 'price_tobo_usd') or 0.0)
+    except Exception:
+        price_tobo = 0.0
+    try:
+        price_half_tobo = float(getattr(referencia_producto, 'price_half_tobo_usd') or 0.0)
+    except Exception:
+        price_half_tobo = 0.0
+    try:
+        # price_unit_usd puede ser None, fallback a price_usd
+        price_unit = float(getattr(referencia_producto, 'price_unit_usd') or getattr(referencia_producto, 'price_usd') or 0.0)
+    except Exception:
+        price_unit = 0.0
+
+    subtotal = (tobos * price_tobo) + (half_tobos * price_half_tobo) + (units * price_unit)
 
     return subtotal
