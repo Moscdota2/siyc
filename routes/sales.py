@@ -730,9 +730,15 @@ def close_bar_order(order_id):
 @manager_or_admin_required
 def sales_reports():
     """View sales history and reports."""
+    from models import Payment
     completed_orders = Order.query.filter_by(status="pagado").order_by(Order.closed_at.desc()).all()
     closures = DailyClosure.query.order_by(DailyClosure.date.desc()).all()
-    pending_total_sales = sum(o.total_price for o in Order.query.filter_by(status="pagado", closure_id=None).all())
+    
+    # Calculate actual money entered but not yet closed (from all payments)
+    pending_total_sales = db.session.query(db.func.sum(Payment.amount)).filter(Payment.closure_id == None).scalar() or 0.0
+    
+    # Get 50 most recent payments for the "What has really entered" view
+    recent_payments = Payment.query.order_by(Payment.payment_date.desc()).limit(50).all()
     
     # Get recent adjustments (regalías/pérdidas) not yet closed
     pending_adjustments = InventoryMovement.query.filter(
@@ -742,6 +748,7 @@ def sales_reports():
     
     return render_template('sales/sales_reports.html', 
                          orders=completed_orders,
+                         recent_payments=recent_payments,
                          closures=closures,
                          pending_total_sales=pending_total_sales,
                          pending_adjustments=pending_adjustments,
@@ -752,23 +759,26 @@ def sales_reports():
 def daily_closure():
     """Perform end-of-day closure."""
     from models import Payment
-    from datetime import datetime, timedelta
+    from datetime import datetime
     
-    # Get all payments made today (not yet in a closure)
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    # Get all payments from today that haven't been closed yet
-    today_payments = db.session.query(Payment).join(Order).filter(
-        Payment.payment_date >= today_start,
-        Order.closure_id == None
+    # Get all payments that haven't been closed yet
+    # This is more robust than date-based filtering
+    today_payments = db.session.query(Payment).filter(
+        Payment.closure_id == None
     ).all()
     
-    # Calculate totals from individual payments
+    # Calculate totals from these payments
     total_usd = sum(p.amount for p in today_payments)
     total_bs = sum(p.amount * (p.exchange_rate or 0) for p in today_payments)
     
-    # Get completed orders for closure assignment
-    completed_orders = Order.query.filter_by(status="pagado", closure_id=None).all()
+    # Get orders involved:
+    # 1. Orders with payments in this closure
+    # 2. Orders marked as 'pagado' but not yet in a closure
+    payment_order_ids = [p.order_id for p in today_payments]
+    involved_orders = Order.query.filter(
+        (Order.id.in_(payment_order_ids)) | 
+        ((Order.status == 'pagado') & (Order.closure_id == None))
+    ).all()
     
     # Pendientes de inventario
     pending_movements = InventoryMovement.query.filter(
@@ -778,10 +788,13 @@ def daily_closure():
     
     if request.method == 'POST':
         try:
+            # Count distinct orders for the record
+            distinct_orders_count = len(involved_orders)
+            
             closure = DailyClosure(
                 total_usd=total_usd,
                 total_bs=total_bs,
-                orders_count=len(completed_orders),
+                orders_count=distinct_orders_count,
                 observations=request.form.get('observations', ''),
                 closed_by=current_user.id,
                 date=datetime.now()
@@ -789,10 +802,17 @@ def daily_closure():
             db.session.add(closure)
             db.session.flush()
             
-            # Only assign closure to COMPLETED orders
-            for o in completed_orders:
-                o.closure_id = closure.id
+            # 1. Assign closure to all payments included
+            for p in today_payments:
+                p.closure_id = closure.id
             
+            # 2. Assign closure to orders that are FULLY paid
+            # (Partial orders stay with closure_id=None so they can appear in future closures when more payments are made)
+            for o in involved_orders:
+                if o.status == 'pagado':
+                    o.closure_id = closure.id
+            
+            # 3. Assign closure to inventory movements
             for m in pending_movements:
                 m.closure_id = closure.id
                 
@@ -803,8 +823,29 @@ def daily_closure():
             db.session.rollback()
             flash(f'Error: {str(e)}', 'danger')
 
-    # Calculate method breakdown from payments
+    # Calculate method breakdown and per-order contributions
     method_totals = {}
+    order_contributions = {}
+    
+    for o in involved_orders:
+        o_payments = [p for p in today_payments if p.order_id == o.id]
+        total_p_today = sum(p.amount for p in o_payments)
+        
+        # Check if there were ANY payments for this order in PAST closures
+        has_previous_payments = Payment.query.filter(
+            Payment.order_id == o.id, 
+            Payment.closure_id != None
+        ).first() is not None
+        
+        # An order is 'abono' if it's currently partial OR if it was completed via multiple installments
+        # (if it has previous payments, today's entry is an installment/abono)
+        is_abono = (o.status == 'parcial') or has_previous_payments or (len(o_payments) > 1)
+        
+        order_contributions[o.id] = {
+            'today_amount': total_p_today,
+            'abono_amount': total_p_today if is_abono else 0.0
+        }
+
     for p in today_payments:
         method_name = p.method.name if p.method else "Sin método"
         if method_name not in method_totals:
@@ -818,11 +859,13 @@ def daily_closure():
         method_totals[method_name]['bs'] += p.amount * (p.exchange_rate or 0)
             
     return render_template('sales/daily_closure.html', 
-                         orders=completed_orders,
+                         orders=involved_orders,
                          payments=today_payments,
+                         order_contributions=order_contributions,
                          total_usd=total_usd, 
                          total_bs=total_bs,
-                         method_totals=method_totals)
+                         method_totals=method_totals,
+                         adjustments=pending_movements)
 
 @sales_bp.route('/bar_orders')
 @login_required

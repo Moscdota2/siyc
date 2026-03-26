@@ -146,6 +146,27 @@ class DailyClosure(db.Model):
     @property
     def method_breakdown(self):
         breakdown = {}
+        
+        # First try via payments (new robust method)
+        if self.payments:
+            for payment in self.payments:
+                method = payment.method
+                if not method:
+                    continue
+                
+                if method.name not in breakdown:
+                    breakdown[method.name] = {
+                        'usd': 0.0,
+                        'bs': 0.0,
+                        'currency': method.currency.upper()
+                    }
+                
+                # Payment amount is always stored in USD
+                breakdown[method.name]['usd'] += payment.amount
+                breakdown[method.name]['bs'] += payment.amount * (payment.exchange_rate or 0)
+            return breakdown
+
+        # Fallback to orders (legacy method)
         for order in self.orders:
             method = order.payment_method
             if not method:
@@ -173,6 +194,8 @@ class Payment(db.Model):
     registered_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     user = db.relationship('User')
     notes = db.Column(db.String(200))
+    closure_id = db.Column(db.Integer, db.ForeignKey('daily_closure.id'), nullable=True)
+    closure = db.relationship('DailyClosure', backref='payments')
 
 def create_initial_products():
     from exchange import get_current_rate

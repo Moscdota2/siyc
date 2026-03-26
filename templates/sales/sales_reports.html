@@ -28,11 +28,11 @@
 
     <div class="reports-grid">
         <div class="main-column">
-            <h2>Ventas Recientes</h2>
+            <h2>Cobros Recientes (Lo que ha entrado)</h2>
             <div class="summary-card info-card">
                 <div class="summary-item">
-                    <p><strong>Total Ventas Pendientes:</strong> ${{ "%.2f"|format(pending_total_sales) }}</p>
-                    <small>Se incluirán en el próximo cierre de caja.</small>
+                    <p><strong>Total en Caja (Hoy No Cerrado):</strong> ${{ "%.2f"|format(pending_total_sales) }}</p>
+                    <small>Suma de todos los pagos y abonos pendientes de cierre.</small>
                 </div>
                 <div class="summary-item" style="text-align: right;">
                     <a href="{{ url_for('sales.daily_closure') }}" class="btn btn-sm btn-outline-primary">Ir a Cierre de
@@ -59,32 +59,34 @@
             <table class="sales-table">
                 <thead>
                     <tr>
-                        <th>ID</th>
-                        <th>Tipo</th>
-                        <th>Detalle</th>
-                        <th>Total USD</th>
-                        <th>Pago</th>
-                        <th>Cierre</th>
                         <th>Fecha</th>
+                        <th>Orden/ID</th>
+                        <th>Monto</th>
+                        <th>Método</th>
+                        <th>Estado Cierre</th>
+                        <th>Notas</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for order in orders[:20] %}
+                    {% for payment in recent_payments %}
                     <tr>
-                        <td>{{ order.id }}</td>
-                        <td>{{ 'Mesa ' ~ order.table.number if order.table_id else order.customer_name }}</td>
-                        <td>${{ "%.2f"|format(order.total_price) }}</td>
+                        <td>{{ payment.payment_date.strftime('%d/%m/%Y %H:%M') }}</td>
                         <td>
-                            <span class="badge badge-success">Pagado</span>
+                            <a href="{{ url_for('sales.view_bar_order', order_id=payment.order_id) if not payment.order.table_id else url_for('sales.view_order', table_id=payment.order.table_id) }}">
+                                #{{ payment.order_id }} 
+                                ({{ 'Mesa ' ~ payment.order.table.number if payment.order.table_id else payment.order.customer_name or 'Barra' }})
+                            </a>
                         </td>
+                        <td style="color: #10b981; font-weight: 700;">${{ "%.2f"|format(payment.amount) }}</td>
+                        <td>{{ payment.method.name if payment.method else 'N/A' }}</td>
                         <td>
-                            {% if order.closure_id %}
-                            <span class="badge badge-success">Cuadrado</span>
+                            {% if payment.closure_id %}
+                            <span class="badge badge-success">Cerrado</span>
                             {% else %}
                             <span class="badge badge-warning">Pendiente</span>
                             {% endif %}
                         </td>
-                        <td>{{ order.closed_at.strftime('%d/%m/%Y %H:%M') if order.closed_at else 'N/A' }}</td>
+                        <td><small>{{ payment.notes or '-' }}</small></td>
                     </tr>
                     {% endfor %}
                 </tbody>

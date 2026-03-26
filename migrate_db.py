@@ -49,6 +49,14 @@ def migrate():
         except sqlite3.OperationalError as e:
             print(f"❌ Error al migrar notes: {e}")
 
+    if 'closure_id' not in existing_columns:
+        try:
+            print("Intentando agregar columna 'closure_id' a 'payment'...")
+            cursor.execute("ALTER TABLE payment ADD COLUMN closure_id INTEGER REFERENCES daily_closure(id)")
+            print("✅ Columna 'closure_id' agregada exitosamente.")
+        except sqlite3.OperationalError as e:
+            print(f"❌ Error al migrar closure_id: {e}")
+
     # Add total_paid fields to Order table
     cursor.execute("PRAGMA table_info('order')")
     order_columns = [row[1] for row in cursor.fetchall()]

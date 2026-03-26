@@ -88,20 +88,22 @@
         </div>
     </form>
 
-    <h2>Detalle de Órdenes Pendientes</h2>
+    <h2>Detalle de Órdenes con Actividad</h2>
     <table class="sales-table">
         <thead>
             <tr>
                 <th>ID</th>
                 <th>Cliente/Mesa</th>
-                <th>Monto USD</th>
-                <th>Monto BS</th>
-                <th>Método de Pago</th>
-                <th>Fecha</th>
+                <th>Estado</th>
+                <th>Total Hoy</th>
+                <th>Abonos</th>
+                <th>Método(s) Pago</th>
+                <th>Hora</th>
             </tr>
         </thead>
         <tbody>
             {% for order in orders %}
+            {% set info = order_contributions.get(order.id, {'today_amount': 0, 'abono_amount': 0}) %}
             <tr>
                 <td>{{ order.id }}</td>
                 <td>
@@ -111,14 +113,22 @@
                     {{ order.customer_name }}
                     {% endif %}
                 </td>
-                <td>${{ "%.2f"|format(order.payment_amount_usd or 0.0) }}</td>
-                <td>{{ "%.2f"|format(order.payment_amount_bs or 0.0) }} Bs</td>
+                <td>
+                    {% if order.status == 'pagado' %}
+                    <span class="badge badge-success">Pagada</span>
+                    {% else %}
+                    <span class="badge badge-warning">Parcial (Abono)</span>
+                    {% endif %}
+                </td>
+                <td><strong style="color: #166534;">${{ "%.2f"|format(info.today_amount) }}</strong></td>
+                <td style="color: #92400e;">${{ "%.2f"|format(info.abono_amount) }}</td>
                 <td>
                     {% set unique_methods = [] %}
-                    {% for p in order.payments %}
-                    {% if p.method and p.method.name not in unique_methods %}
-                    {% set _ = unique_methods.append(p.method.name) %}
-                    {% endif %}
+                    {# Mostrar solo métodos usados en los pagos que se están cerrando AHORA #}
+                    {% for p in payments %}
+                        {% if p.order_id == order.id and p.method and p.method.name not in unique_methods %}
+                            {% set _ = unique_methods.append(p.method.name) %}
+                        {% endif %}
                     {% endfor %}
 
                     {% if unique_methods %}
@@ -127,7 +137,7 @@
                     {{ order.payment_method.name if order.payment_method else '-' }}
                     {% endif %}
                 </td>
-                <td>{{ order.closed_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                <td>{{ order.created_at.strftime('%H:%M') }}</td>
             </tr>
             {% endfor %}
         </tbody>
