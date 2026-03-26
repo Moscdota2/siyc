@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_user, logout_user, login_required, current_user
-from py_models import User, Order, OrderDetail, InventoryMovement, Product, DailyClosure, Table
-from py_exchange import db
+from models import User, Order, OrderDetail, InventoryMovement, Product, DailyClosure, Table, Payment
+from exchange import db
 from decorators import admin_required
 
 auth_bp = Blueprint('auth', __name__)
@@ -37,12 +37,13 @@ def admin_db():
         
         try:
             if action == 'clear_sales':
-                # Clear all orders and details
+                # Clear all orders, details and payments
                 OrderDetail.query.delete()
+                Payment.query.delete()
                 Order.query.delete()
                 # Reset table status
                 Table.query.update({Table.status: "disponible"})
-                flash('Historial de ventas y mesas reiniciado', 'success')
+                flash('Historial de ventas, pagos y mesas reiniciado', 'success')
                 
             elif action == 'clear_history':
                 # Clear inventory movements (except locked ones?)
@@ -60,11 +61,12 @@ def admin_db():
             elif action == 'clear_all':
                 # Nuclear option
                 OrderDetail.query.delete()
+                Payment.query.delete()
                 Order.query.delete()
                 InventoryMovement.query.delete()
                 DailyClosure.query.delete()
                 Table.query.update({Table.status: "disponible"})
-                flash('Bases de datos de transacciones reiniciadas completamente', 'warning')
+                flash('Bases de datos de transacciones reiniciadas completamente (incluye pagos)', 'warning')
                 
             db.session.commit()
         except Exception as e:

@@ -40,8 +40,8 @@ Orden Mesa {{ order.table.number }}
             <p class="waiter-info">Atendido por: <strong>{{ order.waiter.username }}</strong></p>
         </div>
         <div class="status-section">
-            <span class="status-badge {% if order.status == 'pendiente' %}pending{% else %}paid{% endif %}">
-                <i class="fas {% if order.status == 'pendiente' %}fa-clock{% else %}fa-check-circle{% endif %}"></i>
+            <span class="status-badge {% if order.status == 'pendiente' %}pending{% elif order.status == 'parcial' %}partial{% else %}paid{% endif %}">
+                <i class="fas {% if order.status == 'pendiente' %}fa-clock{% elif order.status == 'parcial' %}fa-hand-holding-usd{% else %}fa-check-circle{% endif %}"></i>
                 {{ order.status|upper }}
             </span>
         </div>
@@ -69,6 +69,22 @@ Orden Mesa {{ order.table.number }}
                 <p>{{ "%.2f"|format(order.total_price * current_rate) }} Bs</p>
             </div>
         </div>
+        {% if order.status == 'parcial' %}
+        <div class="info-card paid-card">
+            <div class="card-icon"><i class="fas fa-check-double"></i></div>
+            <div class="card-content">
+                <label>Pagado USD</label>
+                <p>${{ "%.2f"|format(order.total_paid_usd or 0.0) }}</p>
+            </div>
+        </div>
+        <div class="info-card remaining-card">
+            <div class="card-icon"><i class="fas fa-exclamation-circle"></i></div>
+            <div class="card-content">
+                <label>Restante USD</label>
+                <p>${{ "%.2f"|format(remaining_balance) }}</p>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     <div class="order-products">
@@ -103,41 +119,63 @@ Orden Mesa {{ order.table.number }}
                     <td>
                         {% if item.product.category == 'Cerveza' and item.exit_type == 'individual' %}
                         {% if item.quantity >= 36 %}
-                        ${{ "%.2f"|format(item.product.price_box_usd / item.quantity) }} / {{
-                        "%.2f"|format((item.product.price_box_usd / item.quantity) * current_rate) }} Bs
+                        ${{ "%.2f"|format(item.product.price_box_usd / item.quantity) }}
                         {% elif item.quantity >= 18 %}
-                        ${{ "%.2f"|format(item.product.price_half_box_usd / item.quantity) }} / {{
-                        "%.2f"|format((item.product.price_half_box_usd / item.quantity) * current_rate) }} Bs
+                        ${{ "%.2f"|format(item.product.price_half_box_usd / item.quantity) }}
                         {% elif item.quantity >= 12 %}
-                        ${{ "%.2f"|format(item.product.price_tobo_usd / item.quantity) }} / {{
-                        "%.2f"|format((item.product.price_tobo_usd / item.quantity) * current_rate) }} Bs
+                        ${{ "%.2f"|format(item.product.price_tobo_usd / item.quantity) }}
                         {% elif item.quantity >= 6 %}
-                        ${{ "%.2f"|format(item.product.price_half_tobo_usd / item.quantity) }} / {{
-                        "%.2f"|format((item.product.price_half_tobo_usd / item.quantity) * current_rate) }} Bs
+                        ${{ "%.2f"|format(item.product.price_half_tobo_usd / item.quantity) }}
                         {% else %}
-                        ${{ "%.2f"|format(item.subtotal/item.quantity) }} / {{
-                        "%.2f"|format((item.subtotal/item.quantity) * current_rate) }} Bs
+                        ${{ "%.2f"|format(item.subtotal/item.quantity) }}
                         {% endif %}
                         {% else %}
-                        ${{ "%.2f"|format(item.subtotal/item.quantity) }} / {{
-                        "%.2f"|format((item.subtotal/item.quantity) * current_rate) }} Bs
+                        ${{ "%.2f"|format(item.subtotal/item.quantity) }}
                         {% endif %}
                     </td>
-                    <td>${{ "%.2f"|format(item.subtotal) }} / {{ "%.2f"|format(item.subtotal * current_rate) }} Bs</td>
+                    <td>${{ "%.2f"|format(item.subtotal) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
             <tfoot>
-                <tr>
+                {% if order.status == 'pendiente' %}
+                <tr class="total-row">
                     <td colspan="4" class="text-right"><strong>TOTAL</strong></td>
-                    <td><strong>${{ "%.2f"|format(order.total_price) }} / {{ "%.2f"|format(order.total_price *
-                            current_rate) }} Bs</strong></td>
+                    <td><strong>${{ "%.2f"|format(order.total_price) }} / {{ "%.2f"|format(order.total_price * current_rate) }} Bs</strong></td>
                 </tr>
+                {% elif order.status == 'parcial' %}
+                <tr class="total-row">
+                    <td colspan="4" class="text-right"><strong>SUBTOTAL PRODUCTOS</strong></td>
+                    <td><strong>${{ "%.2f"|format(order.total_price) }}</strong></td>
+                </tr>
+                {% if order.payments %}
+                {% set last_p = order.payments|last %}
+                <tr class="payment-row">
+                    <td colspan="4" class="text-right"><em>Último Abono: {{ last_p.method.name }}</em></td>
+                    <td class="text-danger">-${{ "%.2f"|format(last_p.amount) }}</td>
+                </tr>
+                <tr class="total-paid-row">
+                    <td colspan="4" class="text-right"><strong>TOTAL ABONADO</strong></td>
+                    <td class="text-danger"><strong>-${{ "%.2f"|format(order.total_paid_usd or 0.0) }}</strong></td>
+                </tr>
+                {% endif %}
+                <tr class="final-balance-row">
+                    <td colspan="4" class="text-right"><strong>SALDO RESTANTE</strong></td>
+                    <td class="{% if remaining_balance > 0.01 %}text-primary{% else %}text-success{% endif %}">
+                        <strong>${{ "%.2f"|format(remaining_balance) }} / {{ "%.2f"|format(remaining_balance * current_rate) }} Bs</strong>
+                    </td>
+                </tr>
+                {% else %} {# PAGADO #}
+                <tr class="total-row">
+                    <td colspan="4" class="text-right"><strong>TOTAL PAGADO</strong></td>
+                    <td><strong>${{ "%.2f"|format(order.total_paid_usd or order.total_price) }}</strong></td>
+                </tr>
+                {% endif %}
             </tfoot>
         </table>
     </div>
 
-    {% if order.status == "pendiente" %}
+    {% if order.status in ["pendiente", "parcial"] %}
     <div class="add-products">
         <h3>Agregar Más Productos</h3>
         <form
@@ -210,9 +248,16 @@ Orden Mesa {{ order.table.number }}
     {% if current_user.role in ['admin', 'manager', 'staff'] %}
     <div class="payment-card-section">
         <h3><i class="fas fa-credit-card"></i> Registrar Pago</h3>
-        <form method="POST" id="paymentForm"
-            action="{% if is_bar_order %}{{ url_for('sales.close_bar_order', order_id=order.id) }}{% else %}{{ url_for('sales.close_order', table_id=table.id) }}{% endif %}">
+        <form method="POST" action="{{ url_for('sales.pay_order', order_id=order.id) }}">
             <input type="hidden" name="order_id" value="{{ order.id }}">
+
+            <div class="form-group">
+                <label for="payment_type">Tipo de Pago:</label>
+                <select name="payment_type" class="form-control" required>
+                    <option value="contado">Contado</option>
+                    <option value="abono">Abono</option>
+                </select>
+            </div>
 
             <div class="payment-grid">
                 <div class="form-group">
@@ -228,7 +273,7 @@ Orden Mesa {{ order.table.number }}
                 <div id="usdPaymentSection" class="payment-sub-section">
                     <div class="form-group">
                         <label>Método de Pago USD</label>
-                        <select name="payment_method" class="form-control" id="usdPaymentMethod" required>
+                        <select name="payment_method_usd" class="form-control" id="usdPaymentMethod" required>
                             {% for method in payment_methods if method.currency == 'usd' %}
                             <option value="{{ method.id }}">{{ method.name }}</option>
                             {% endfor %}
@@ -236,15 +281,15 @@ Orden Mesa {{ order.table.number }}
                     </div>
                     <div class="form-group">
                         <label>Monto USD</label>
-                        <input type="number" step="0.01" name="payment_amount" value="{{ "
-                            %.2f"|format(order.total_price) }}" class="form-control" id="usdAmount" required>
+                        <input type="number" step="0.01" name="payment_amount_usd" value="{{ "
+                            %.2f"|format(remaining_balance) }}" class="form-control" id="usdAmount" required>
                     </div>
                 </div>
 
                 <div id="bsPaymentSection" class="payment-sub-section" style="display:none;">
                     <div class="form-group">
                         <label>Método de Pago Bs</label>
-                        <select name="payment_method" class="form-control" id="bsPaymentMethod" disabled>
+                        <select name="payment_method_bs" class="form-control" id="bsPaymentMethod">
                             {% for method in payment_methods if method.currency == 'bs' %}
                             <option value="{{ method.id }}">{{ method.name }}</option>
                             {% endfor %}
@@ -252,16 +297,15 @@ Orden Mesa {{ order.table.number }}
                     </div>
                     <div class="form-group">
                         <label>Monto Bs</label>
-                        <input type="number" step="0.01" name="payment_amount" value="{{ "
-                            %.2f"|format(order.total_price * current_rate) }}" class="form-control" id="bsAmount"
-                            disabled>
+                        <input type="number" step="0.01" name="payment_amount_bs" value="{{ "
+                            %.2f"|format(remaining_balance * current_rate) }}" class="form-control" id="bsAmount">
                     </div>
                 </div>
             </div>
 
             <div class="payment-actions">
                 <button type="submit" class="btn btn-success btn-lg">
-                    <i class="fas fa-check-double"></i> Confirmar y Cerrar Orden
+                    <i class="fas fa-check-double"></i> Registrar Pago
                 </button>
             </div>
         </form>
@@ -380,6 +424,26 @@ Orden Mesa {{ order.table.number }}
     }
 
     .status-badge.paid {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .status-badge.partial {
+        background: #e0f2fe;
+        color: #075985;
+    }
+
+    .info-card.remaining-card {
+        border: 2px solid #3498db;
+        background: #f0f9ff;
+    }
+
+    .info-card.remaining-card .card-icon {
+        background: #3498db;
+        color: white;
+    }
+
+    .info-card.paid-card .card-icon {
         background: #dcfce7;
         color: #166534;
     }

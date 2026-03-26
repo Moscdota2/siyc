@@ -1,8 +1,9 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
-from py_exchange import db, get_current_rate, update_rate
-from py_models import Product, Table, Order, OrderDetail, DailyClosure, PaymentMethod, InventoryMovement, calcular_precio_cervezas
+from exchange import db, get_current_rate, update_rate
+from models import Product, Table, Order, OrderDetail, DailyClosure, PaymentMethod, InventoryMovement
 from decorators import admin_required, manager_or_admin_required
+from logic import calculate_beer_price
 from datetime import datetime
 
 sales_bp = Blueprint('sales', __name__)
@@ -49,21 +50,7 @@ def view_tables():
     tables = Table.query.order_by(Table.number).all()
     
     # Lazy Cleanup: If a table is 'ocupada' but has no items in its active order, reset it.
-    # This happens when a waiter opens a table but doesn't add anything.
-    cleaned = False
-    for table in tables:
-        if table.status == "ocupada":
-            active_order = Order.query.filter_by(table_id=table.id, status="pendiente").first()
-            if not active_order or not active_order.products:
-                table.status = "disponible"
-                if active_order:
-                    db.session.delete(active_order)
-                cleaned = True
-    
-    if cleaned:
-        db.session.commit()
-        # Refresh table list after cleanup
-        tables = Table.query.order_by(Table.number).all()
+    Table.cleanup_empty_orders()
         
     return render_template('sales/tables.html', tables=tables)
 
@@ -134,7 +121,10 @@ def create_order(table_id):
     """Initiate an order for a table."""
     table = Table.query.get_or_404(table_id)
     if table.status != "disponible":
-        active_order = Order.query.filter_by(table_id=table.id, status="pendiente").first()
+        active_order = Order.query.filter(
+            Order.table_id == table.id, 
+            Order.status.in_(['pendiente', 'parcial'])
+        ).first()
         if active_order:
             return redirect(url_for('sales.view_order', table_id=table.id))
         table.status = "disponible"
@@ -156,10 +146,21 @@ def create_order(table_id):
 def view_order(table_id):
     """View active order for a table."""
     table = Table.query.get_or_404(table_id)
-    active_order = Order.query.filter_by(table_id=table.id, status="pendiente").first()
+    active_order = Order.query.filter(
+        Order.table_id == table.id,
+        Order.status.in_(['pendiente', 'parcial'])
+    ).first()
     if not active_order:
         flash('No hay pedido activo', 'warning')
         return redirect(url_for('sales.view_tables'))
+    
+    # Calculate remaining balance
+    if active_order.total_paid_usd == 0 and active_order.payments:
+        active_order.total_paid_usd = sum(p.amount for p in active_order.payments)
+        active_order.total_paid_bs = sum(p.amount * (p.exchange_rate or 0) for p in active_order.payments)
+        db.session.commit()
+        
+    remaining_balance = active_order.total_price - (active_order.total_paid_usd or 0.0)
     
     order_details = OrderDetail.query.filter_by(order_id=active_order.id).all()
     
@@ -202,6 +203,7 @@ def view_order(table_id):
                          products=products_data,
                          table=table,
                          payment_methods=payment_methods,
+                         remaining_balance=remaining_balance,
                          current_rate=get_current_rate(),
                          is_bar_order=False)
 
@@ -235,7 +237,7 @@ def _add_product_to_order(order, product_id, quantity, exit_type):
     elif product.category == 'Cerveza' and exit_type == 'individual':
         cervezas_actuales = sum(d.quantity for d in order.products if d.product.category == "Cerveza" and d.exit_type == 'individual')
         total_cervezas = cervezas_actuales + quantity
-        subtotal = calcular_precio_cervezas(total_cervezas, product) - calcular_precio_cervezas(cervezas_actuales, product)
+        subtotal = calculate_beer_price(total_cervezas, product) - calculate_beer_price(cervezas_actuales, product)
     else:
         prices = {
             'half_tobo': product.price_half_tobo_usd,
@@ -294,7 +296,10 @@ def _add_product_to_order(order, product_id, quantity, exit_type):
 def add_product(table_id):
     """Add a product to an existing table order."""
     table = Table.query.get_or_404(table_id)
-    order = Order.query.filter_by(table_id=table_id, status="pendiente").first_or_404()
+    order = Order.query.filter(
+        Order.table_id == table_id, 
+        Order.status.in_(['pendiente', 'parcial'])
+    ).first_or_404()
     
     success, message = _add_product_to_order(
         order, 
@@ -585,7 +590,7 @@ def register_sale():
                 for detail in beer_details:
                     qty = detail.quantity
                     # Subtotal incremental para este bloque de cervezas
-                    sub = calcular_precio_cervezas(prev_count + qty, cerveza_ref) - calcular_precio_cervezas(prev_count, cerveza_ref)
+                    sub = calculate_beer_price(prev_count + qty, cerveza_ref) - calculate_beer_price(prev_count, cerveza_ref)
                     try:
                         detail.subtotal = float(sub)
                     except Exception:
@@ -625,8 +630,16 @@ def register_sale():
 def view_bar_order(order_id):
     """View and pay a bar order."""
     order = Order.query.get_or_404(order_id)
-    if order.status != "pendiente":
+    if order.status not in ["pendiente", "parcial"]:
         return redirect(url_for('sales.sales_reports'))
+    
+    # Calculate remaining balance
+    if order.total_paid_usd == 0 and order.payments:
+        order.total_paid_usd = sum(p.amount for p in order.payments)
+        order.total_paid_bs = sum(p.amount * (p.exchange_rate or 0) for p in order.payments)
+        db.session.commit()
+        
+    remaining_balance = order.total_price - (order.total_paid_usd or 0.0)
     
     order_details = OrderDetail.query.filter_by(order_id=order.id).all()
     
@@ -654,6 +667,7 @@ def view_bar_order(order_id):
                          order_details=order_details, 
                          products=products_data, 
                          payment_methods=payment_methods, 
+                         remaining_balance=remaining_balance,
                          is_bar_order=True, 
                          current_rate=get_current_rate())
 
@@ -662,7 +676,7 @@ def view_bar_order(order_id):
 def add_product_to_bar_order(order_id):
     """Add a product to an existing bar order."""
     order = Order.query.get_or_404(order_id)
-    if order.status != "pendiente":
+    if order.status not in ["pendiente", "parcial"]:
         flash("La orden ya está cerrada", "warning")
         return redirect(url_for('sales.sales_reports'))
 
@@ -737,9 +751,24 @@ def sales_reports():
 @admin_required
 def daily_closure():
     """Perform end-of-day closure."""
-    pending_orders = Order.query.filter_by(status="pagado", closure_id=None).all()
-    total_usd = sum(o.payment_amount_usd or 0 for o in pending_orders)
-    total_bs = sum(o.payment_amount_bs or 0 for o in pending_orders)
+    from models import Payment
+    from datetime import datetime, timedelta
+    
+    # Get all payments made today (not yet in a closure)
+    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Get all payments from today that haven't been closed yet
+    today_payments = db.session.query(Payment).join(Order).filter(
+        Payment.payment_date >= today_start,
+        Order.closure_id == None
+    ).all()
+    
+    # Calculate totals from individual payments
+    total_usd = sum(p.amount for p in today_payments)
+    total_bs = sum(p.amount * (p.exchange_rate or 0) for p in today_payments)
+    
+    # Get completed orders for closure assignment
+    completed_orders = Order.query.filter_by(status="pagado", closure_id=None).all()
     
     # Pendientes de inventario
     pending_movements = InventoryMovement.query.filter(
@@ -752,7 +781,7 @@ def daily_closure():
             closure = DailyClosure(
                 total_usd=total_usd,
                 total_bs=total_bs,
-                orders_count=len(pending_orders),
+                orders_count=len(completed_orders),
                 observations=request.form.get('observations', ''),
                 closed_by=current_user.id,
                 date=datetime.now()
@@ -760,7 +789,8 @@ def daily_closure():
             db.session.add(closure)
             db.session.flush()
             
-            for o in pending_orders:
+            # Only assign closure to COMPLETED orders
+            for o in completed_orders:
                 o.closure_id = closure.id
             
             for m in pending_movements:
@@ -773,22 +803,23 @@ def daily_closure():
             db.session.rollback()
             flash(f'Error: {str(e)}', 'danger')
 
-    # Calculate method breakdown for display
+    # Calculate method breakdown from payments
     method_totals = {}
-    for o in pending_orders:
-        method_name = o.payment_method.name if o.payment_method else "Sin método"
+    for p in today_payments:
+        method_name = p.method.name if p.method else "Sin método"
         if method_name not in method_totals:
             method_totals[method_name] = {
                 'usd': 0.0,
                 'bs': 0.0,
-                'currency': o.payment_method.currency.upper() if o.payment_method else 'USD'
+                'currency': p.method.currency.upper() if p.method else 'USD'
             }
         
-        method_totals[method_name]['usd'] += o.payment_amount_usd or 0.0
-        method_totals[method_name]['bs'] += o.payment_amount_bs or 0.0
+        method_totals[method_name]['usd'] += p.amount
+        method_totals[method_name]['bs'] += p.amount * (p.exchange_rate or 0)
             
     return render_template('sales/daily_closure.html', 
-                         orders=pending_orders, 
+                         orders=completed_orders,
+                         payments=today_payments,
                          total_usd=total_usd, 
                          total_bs=total_bs,
                          method_totals=method_totals)
@@ -797,5 +828,127 @@ def daily_closure():
 @login_required
 def bar_orders():
     """View pending bar orders."""
-    orders = Order.query.filter_by(status='pendiente', table_id=None).all()
+    orders = Order.query.filter(
+        Order.table_id == None,
+        Order.status.in_(['pendiente', 'parcial'])
+    ).all()
     return render_template('sales/bar_orders.html', orders=orders, current_rate=get_current_rate())
+
+@sales_bp.route('/order/<int:order_id>/pay', methods=['POST'])
+@login_required
+def pay_order(order_id):
+    """Handle payment for an order (full or installment)."""
+    from models import Payment
+    from exchange import get_current_rate
+    
+    order = Order.query.get_or_404(order_id)
+    payment_type = request.form.get('payment_type')
+    payment_currency = request.form.get('payment_currency', 'usd')
+    notes = request.form.get('notes', '')
+    
+    # Extract payment method and amount based on currency
+    if payment_currency == 'usd':
+        payment_method_id = int(request.form.get('payment_method_usd'))
+        payment_amount = float(request.form.get('payment_amount_usd', 0))
+    else:
+        payment_method_id = int(request.form.get('payment_method_bs'))
+        payment_amount = float(request.form.get('payment_amount_bs', 0))
+    
+    current_rate = get_current_rate()
+    
+    # Convert payment to both currencies
+    if payment_currency == 'usd':
+        amount_usd = payment_amount
+        amount_bs = payment_amount * current_rate
+    else:
+        amount_usd = payment_amount / current_rate
+        amount_bs = payment_amount
+    
+    # Calculate remaining balance
+    remaining_usd = order.total_price - (order.total_paid_usd or 0.0)
+    
+    if payment_type == 'contado':
+        # Full payment - must cover remaining balance
+        if amount_usd < remaining_usd - 0.01:  # 0.01 tolerance for rounding
+            flash(f'Pago insuficiente. Debe: ${remaining_usd:.2f}, Pagó: ${amount_usd:.2f}', 'danger')
+            if order.table_id:
+                return redirect(url_for('sales.view_order', table_id=order.table_id))
+            else:
+                return redirect(url_for('sales.view_bar_order', order_id=order.id))
+        
+        # Create payment record
+        payment = Payment(
+            order_id=order.id,
+            amount=amount_usd,
+            payment_method=payment_method_id,
+            exchange_rate=current_rate,
+            registered_by=current_user.id,
+            notes=notes or 'Pago completo'
+        )
+        
+        order.total_paid_usd = (order.total_paid_usd or 0.0) + amount_usd
+        order.total_paid_bs = (order.total_paid_bs or 0.0) + amount_bs
+        order.status = 'pagado'
+        order.closed_at = datetime.now()
+        
+        # Update legacy fields for backward compatibility
+        order.payment_currency = payment_currency
+        order.payment_amount_usd = amount_usd
+        order.payment_amount_bs = amount_bs
+        order.payment_method_id = payment_method_id
+        order.exchange_rate = current_rate
+        
+        db.session.add(payment)
+        flash(f'Pago completo registrado: ${amount_usd:.2f}', 'success')
+        
+    elif payment_type == 'abono':
+        # Partial payment
+        if amount_usd > remaining_usd:
+            flash(f'El abono (${amount_usd:.2f}) excede la deuda (${remaining_usd:.2f})', 'warning')
+            amount_usd = remaining_usd
+            amount_bs = remaining_usd * current_rate
+        
+        # Create payment record
+        payment = Payment(
+            order_id=order.id,
+            amount=amount_usd,
+            payment_method=payment_method_id,
+            exchange_rate=current_rate,
+            registered_by=current_user.id,
+            notes=notes or f'Abono #{len(order.payments) + 1}'
+        )
+        
+        order.total_paid_usd = (order.total_paid_usd or 0.0) + amount_usd
+        order.total_paid_bs = (order.total_paid_bs or 0.0) + amount_bs
+        
+        # Check if fully paid after this installment
+        new_remaining = order.total_price - order.total_paid_usd
+        if new_remaining <= 0.01:  # Fully paid
+            order.status = 'pagado'
+            order.closed_at = datetime.now()
+            
+            # Update legacy fields for closure report compatibility
+            order.payment_currency = payment_currency
+            order.payment_amount_usd = order.total_paid_usd
+            order.payment_amount_bs = order.total_paid_bs
+            order.payment_method_id = payment_method_id
+            order.exchange_rate = current_rate
+            
+            flash(f'¡Orden completamente pagada! Último abono: ${amount_usd:.2f}', 'success')
+        else:
+            order.status = 'parcial'
+            flash(f'Abono registrado: ${amount_usd:.2f}. Resta: ${new_remaining:.2f}', 'success')
+        
+        db.session.add(payment)
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al registrar el pago: {str(e)}', 'danger')
+
+    # Redirect based on order type
+    if order.table_id:
+        return redirect(url_for('sales.view_order', table_id=order.table_id))
+    else:
+        return redirect(url_for('sales.view_bar_order', order_id=order.id))

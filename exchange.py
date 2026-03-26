@@ -1,6 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-from py_bcv import get_bcv_rate
+from bcv_provider import get_bcv_rate
 
 # Centralized database instance
 db = SQLAlchemy()

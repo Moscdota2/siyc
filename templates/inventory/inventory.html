@@ -27,7 +27,7 @@
         {% if current_user.role == 'admin' %}
         <td>
             <a href="/update_product/{{ product.id }}" class="btn btn-primary">Editar</a>
-            <a href="/delete_product/{{ product.id }}" class="btn btn-secondary"
+            <a href="{{ url_for('inventory.reset_product', id=product.id) }}" class="btn btn-secondary"
                 onclick="return confirm('¿Eliminar {{ product.name }}?')">Eliminar</a>
         </td>
         {% endif %}

@@ -1,8 +1,9 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
-from py_exchange import db, get_current_rate
-from py_models import Product, InventoryMovement
+from exchange import db, get_current_rate
+from models import Product, InventoryMovement
 from decorators import admin_required, manager_or_admin_required
+from logic import calculate_inventory_investment
 
 inventory_bp = Blueprint('inventory', __name__)
 
@@ -86,9 +87,9 @@ def update_product(id):
             flash(f'Error al actualizar producto: {str(e)}', 'danger')
     return render_template('inventory/update_product.html', product=product)
 
-@inventory_bp.route('/delete_product/<int:id>')
+@inventory_bp.route('/reset_product/<int:id>')
 @admin_required
-def delete_product(id):
+def reset_product(id):
     """Reset product quantities (do NOT remove the product record).
 
     This is safer for 'reset' operations from the UI: remove historical
@@ -128,41 +129,15 @@ def inventory_entry():
             units_per_box = 1
 
         units = int(boxes * units_per_box)
-        total_usd_investment = 0.0
-
-        # If the user provided an explicit purchase_price, prefer it (convert from BS if needed)
-        if purchase_price and purchase_price > 0:
-            if currency == 'bs':
-                current_rate = get_current_rate()
-                if current_rate <= 0:
-                    flash("Error: Tasa de cambio no disponible o es cero.", "danger")
-                    return redirect(url_for('inventory.inventory_entry'))
-                # purchase_price is expressed in BS; convert entire total to USD
-                total_usd_investment = purchase_price / current_rate
-            else:
-                # purchase_price already in USD (treated as total for the whole entry)
-                total_usd_investment = purchase_price
-        else:
-            # Fallback: use configured per-box / per-unit defaults
-            if currency == 'bs':
-                current_rate = get_current_rate()
-                if current_rate > 0:
-                    if product_type == 'cerveza':
-                        usd_price_per_box = 20.80 if distributor == 'polar' else 19.50
-                        total_usd_investment = boxes * usd_price_per_box
-                    else:
-                        usd_price_per_unit = purchase_price / (units * current_rate) if units > 0 else 0
-                        total_usd_investment = usd_price_per_unit * units
-                else:
-                    flash("Error: Tasa de cambio no disponible o es cero.", "danger")
-                    return redirect(url_for('inventory.inventory_entry'))
-            else:
-                if product_type == 'cerveza':
-                    usd_price_per_box = 17.00 if distributor == 'polar' else 19.00
-                    total_usd_investment = boxes * usd_price_per_box
-                else:
-                    usd_price_per_unit = purchase_price / units if units > 0 else 0
-                    total_usd_investment = usd_price_per_unit * units
+        total_usd_investment = calculate_inventory_investment(
+            product_type=product_type,
+            boxes=boxes,
+            units=units,
+            currency=currency,
+            purchase_price=purchase_price,
+            distributor=distributor,
+            current_rate=get_current_rate()
+        )
         
         product.quantity += units
         if product_type == 'cerveza':

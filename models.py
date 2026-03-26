@@ -3,7 +3,7 @@ from datetime import datetime
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 import pytz
-from py_exchange import db
+from exchange import db
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -44,6 +44,7 @@ class Product(db.Model):
     price_half_box_bs = db.Column(db.Float)
     price_box_bs = db.Column(db.Float)
     is_combo = db.Column(db.Boolean, default=False)
+    has_promo_14 = db.Column(db.Boolean, default=False)
     combo_items = db.Column(db.JSON)
 
 class Table(db.Model):
@@ -51,6 +52,25 @@ class Table(db.Model):
     number = db.Column(db.String(20), unique=True, nullable=False)
     status = db.Column(db.String(20), nullable=False, default="disponible")
     orders = db.relationship('Order', backref='table', lazy=True)
+    
+    @staticmethod
+    def cleanup_empty_orders():
+        """Reset tables that are 'ocupada' but have no products in their active order."""
+        tables = Table.query.filter_by(status="ocupada").all()
+        cleaned = False
+        for table in tables:
+            active_order = Order.query.filter(
+                Order.table_id == table.id,
+                Order.status.in_(['pendiente', 'parcial'])
+            ).first()
+            if not active_order or not active_order.products:
+                table.status = "disponible"
+                if active_order:
+                    db.session.delete(active_order)
+                cleaned = True
+        
+        if cleaned:
+            db.session.commit()
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -60,7 +80,7 @@ class Order(db.Model):
     order_type = db.Column(db.String(20), default="venta") # 'venta', 'regalia', 'perdida'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     closed_at = db.Column(db.DateTime, nullable=True)
-    products = db.relationship('OrderDetail', backref='order', lazy=True)
+    products = db.relationship('OrderDetail', backref='order', lazy=True, cascade="all, delete-orphan")
     customer_name = db.Column(db.String(100), nullable=True)
     waiter_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     waiter = db.relationship('User', backref='orders')
@@ -72,10 +92,13 @@ class Order(db.Model):
     payment_method = db.relationship('PaymentMethod')
     closure_id = db.Column(db.Integer, db.ForeignKey('daily_closure.id'), nullable=True)
     closure = db.relationship('DailyClosure', backref='orders')
+    payments = db.relationship('Payment', backref='order', lazy=True, cascade="all, delete-orphan")
+    total_paid_usd = db.Column(db.Float, default=0.0)
+    total_paid_bs = db.Column(db.Float, default=0.0)
 
 class OrderDetail(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id', ondelete='CASCADE'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False, default=1)
     subtotal = db.Column(db.Float, nullable=False)
@@ -139,8 +162,20 @@ class DailyClosure(db.Model):
             breakdown[method.name]['bs'] += order.payment_amount_bs or 0.0
         return breakdown
 
+class Payment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id', ondelete='CASCADE'), nullable=False)
+    payment_method = db.Column(db.Integer, db.ForeignKey('payment_method.id'), nullable=False)
+    method = db.relationship('PaymentMethod', foreign_keys=[payment_method])
+    amount = db.Column(db.Float, nullable=False)
+    payment_date = db.Column(db.DateTime, default=datetime.utcnow)
+    exchange_rate = db.Column(db.Float)
+    registered_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    user = db.relationship('User')
+    notes = db.Column(db.String(200))
+
 def create_initial_products():
-    from py_exchange import get_current_rate
+    from exchange import get_current_rate
     current_rate = get_current_rate()
     
     # Definimos la estructura de precios estándar para cervezas
@@ -167,6 +202,7 @@ def create_initial_products():
             'presentation': 'Botella 222ml',
             'price_usd': 1.0,
             'cost_per_unit_usd': 17.0/36,
+            'has_promo_14': True,
             **beer_pricing
         },
         {
@@ -176,6 +212,7 @@ def create_initial_products():
             'presentation': 'Botella 222ml',
             'price_usd': 1.0,
             'cost_per_unit_usd': 17.0/36,
+            'has_promo_14': True,
             **beer_pricing
         },
         {
@@ -185,7 +222,29 @@ def create_initial_products():
             'presentation': 'Lata 350ml',
             'price_usd': 1.0,
             'cost_per_unit_usd': 17.0/36,
+            'has_promo_14': True,
             **beer_pricing
+        },
+        {
+            'name': 'Solera Verde',
+            'brand': 'Polar',
+            'category': 'Cerveza',
+            'presentation': 'Botella 222ml',
+            'price_usd': 1.0,
+            'cost_per_unit_usd': 18.0/36,
+            **beer_pricing
+        },
+        {
+            'name': 'Polar Tercio',
+            'brand': 'Polar',
+            'category': 'Cerveza',
+            'presentation': 'Botella 330ml',
+            'price_usd': 1.5,
+            'price_unit_usd': 1.5,
+            'price_unit_bs': 1.5 * current_rate,
+            'cost_per_unit_usd': 1.0,
+            'price_tobo_usd': 0.0, # Al Tercio no se le aplica tobo según el usuario
+            'price_half_tobo_usd': 0.0
         },
         {
             'name': 'Zulia Lager',
@@ -193,8 +252,11 @@ def create_initial_products():
             'category': 'Cerveza',
             'presentation': 'Botella 330ml',
             'price_usd': 1.0,
-            'cost_per_unit_usd': 19.0/36,
-            **beer_pricing
+            'price_unit_usd': 1.0,
+            'price_unit_bs': 1.0 * current_rate,
+            'price_tobo_usd': 10.0, # 10x10 normal o 12x10 promo (usamos 10.0 para el tobo de 12)
+            'price_half_tobo_usd': 5.0,
+            'cost_per_unit_usd': 20.0/36
         },
         # Resto de tus productos individuales (rones, anís, etc.)
         {
@@ -352,9 +414,18 @@ def create_initial_products():
                 price_half_box_bs=prod_data.get('price_half_box_bs', 0),
                 price_box_bs=prod_data.get('price_box_bs', 0),
                 is_alcoholic=prod_data.get('is_alcoholic', True),
-                cost_per_unit_usd=prod_data.get('cost_per_unit_usd', prod_data['price_usd']*0.7)
+                cost_per_unit_usd=prod_data.get('cost_per_unit_usd', prod_data['price_usd']*0.7),
+                has_promo_14=prod_data.get('has_promo_14', False)
             )
             db.session.add(product)
+        else:
+            # Actualizar precios de productos existentes si es necesario (ej: Zulia)
+            product = Product.query.filter_by(name=prod_data['name'], brand=prod_data['brand']).first()
+            if product:
+                product.price_usd = prod_data['price_usd']
+                product.price_unit_usd = prod_data.get('price_unit_usd', prod_data['price_usd'])
+                product.price_tobo_usd = prod_data.get('price_tobo_usd', product.price_tobo_usd)
+                product.has_promo_14 = prod_data.get('has_promo_14', product.has_promo_14)
     
     db.session.commit()
 
@@ -439,30 +510,3 @@ def create_initial_products():
                 db.session.add(combo)
     
     db.session.commit()
-
-
-def calcular_precio_cervezas(total_cervezas, referencia_producto):
-    """ Calcula el precio óptimo de cervezas mezclando marcas """
-    tobos = total_cervezas // 12
-    remaining = total_cervezas % 12
-    half_tobos = remaining // 6
-    units = remaining % 6
-
-    # Seguridad: asegurarse que los precios no sean None
-    try:
-        price_tobo = float(getattr(referencia_producto, 'price_tobo_usd') or 0.0)
-    except Exception:
-        price_tobo = 0.0
-    try:
-        price_half_tobo = float(getattr(referencia_producto, 'price_half_tobo_usd') or 0.0)
-    except Exception:
-        price_half_tobo = 0.0
-    try:
-        # price_unit_usd puede ser None, fallback a price_usd
-        price_unit = float(getattr(referencia_producto, 'price_unit_usd') or getattr(referencia_producto, 'price_usd') or 0.0)
-    except Exception:
-        price_unit = 0.0
-
-    subtotal = (tobos * price_tobo) + (half_tobos * price_half_tobo) + (units * price_unit)
-
-    return subtotal

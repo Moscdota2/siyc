@@ -111,9 +111,22 @@
                     {{ order.customer_name }}
                     {% endif %}
                 </td>
-                <td>${{ "%.2f"|format(order.payment_amount_usd) }}</td>
-                <td>{{ "%.2f"|format(order.payment_amount_bs) }} Bs</td>
-                <td>{{ order.payment_method.name }}</td>
+                <td>${{ "%.2f"|format(order.payment_amount_usd or 0.0) }}</td>
+                <td>{{ "%.2f"|format(order.payment_amount_bs or 0.0) }} Bs</td>
+                <td>
+                    {% set unique_methods = [] %}
+                    {% for p in order.payments %}
+                    {% if p.method and p.method.name not in unique_methods %}
+                    {% set _ = unique_methods.append(p.method.name) %}
+                    {% endif %}
+                    {% endfor %}
+
+                    {% if unique_methods %}
+                    {{ unique_methods|join(', ') }}
+                    {% else %}
+                    {{ order.payment_method.name if order.payment_method else '-' }}
+                    {% endif %}
+                </td>
                 <td>{{ order.closed_at.strftime('%d/%m/%Y %H:%M') }}</td>
             </tr>
             {% endfor %}
@@ -181,7 +194,7 @@
         display: flex;
         align-items: center;
         gap: 20px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         border: 1px solid #f1f5f9;
         transition: transform 0.2s;
     }
